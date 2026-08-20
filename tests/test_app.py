@@ -5,7 +5,10 @@ from desktop_annotator.app import (
     _apply_entry_background,
     _build_sublime_command,
     _close_after_successful_add,
+    _configure_list_word_wrap,
+    _connect_gutter_draw,
     _create_entry_background_tags,
+    _draw_entry_gutters,
     _insert_marked_text,
     _insert_entry_separator,
     _install_toggle_close,
@@ -166,6 +169,120 @@ class PopupToggleTests(unittest.TestCase):
 
 
 class AnnotationListPresentationTests(unittest.TestCase):
+    def test_gutter_paint_runs_after_the_text_view_default_draw(self):
+        class View:
+            connection = None
+
+            def connect_after(self, signal_name, callback):
+                self.connection = (signal_name, callback)
+
+        view = View()
+        callback = object()
+
+        _connect_gutter_draw(view, callback)
+
+        self.assertEqual(view.connection, ("draw", callback))
+
+    def test_row_background_paints_both_gutters_in_its_matching_color(self):
+        class Rectangle:
+            def __init__(self, y, height):
+                self.y = y
+                self.height = height
+
+        class Buffer:
+            def get_iter_at_mark(self, mark):
+                return mark
+
+        class View:
+            def get_buffer(self):
+                return Buffer()
+
+            def get_iter_location(self, iterator):
+                return Rectangle(y=iterator, height=10)
+
+            def buffer_to_window_coords(self, _window_type, x, y):
+                return x, y
+
+            def get_allocated_width(self):
+                return 200
+
+        class Color:
+            red = 0.5
+            green = 0.5
+            blue = 0.5
+            alpha = 0.09
+
+        class Tag:
+            def get_property(self, _name):
+                return Color()
+
+        class Context:
+            rectangles = []
+            color = None
+
+            def set_source_rgba(self, *color):
+                self.color = color
+
+            def rectangle(self, *rectangle):
+                self.rectangles.append(rectangle)
+
+            def fill(self):
+                pass
+
+        class Gtk:
+            class TextWindowType:
+                TEXT = object()
+
+        context = Context()
+
+        _draw_entry_gutters(
+            View(), context, [(10, 30)], [Tag()], Gtk, gutter_width=14
+        )
+
+        self.assertEqual(context.color, (0.5, 0.5, 0.5, 0.09))
+        self.assertEqual(context.rectangles, [(0, 10, 14, 30), (186, 10, 14, 30)])
+
+    def test_list_wraps_at_word_boundaries_without_horizontal_scrolling(self):
+        class Gtk:
+            class WrapMode:
+                WORD = object()
+
+            class PolicyType:
+                NEVER = object()
+                AUTOMATIC = object()
+
+        class View:
+            wrap_mode = None
+            left_margin = None
+            right_margin = None
+
+            def set_wrap_mode(self, wrap_mode):
+                self.wrap_mode = wrap_mode
+
+            def set_left_margin(self, margin):
+                self.left_margin = margin
+
+            def set_right_margin(self, margin):
+                self.right_margin = margin
+
+        class Scroll:
+            policy = None
+
+            def set_policy(self, horizontal, vertical):
+                self.policy = (horizontal, vertical)
+
+        view = View()
+        scroll = Scroll()
+
+        _configure_list_word_wrap(view, scroll, Gtk)
+
+        horizontal_policy, vertical_policy = scroll.policy
+        self.assertEqual(view.wrap_mode, Gtk.WrapMode.WORD)
+        self.assertEqual(view.left_margin, 0)
+        self.assertEqual(view.right_margin, 0)
+        self.assertEqual(horizontal_policy, Gtk.PolicyType.NEVER)
+        self.assertEqual(vertical_policy, Gtk.PolicyType.AUTOMATIC)
+
     def test_bottom_scroll_includes_the_text_views_bottom_margin(self):
         class Adjustment:
             value = None
@@ -249,14 +366,17 @@ class AnnotationListPresentationTests(unittest.TestCase):
         self.assertNotEqual(first_color.alpha, second_color.alpha)
         self.assertLess(max(first_color.alpha, second_color.alpha), 0.15)
 
-    def test_zebra_background_leaves_one_row_plain_and_tints_the_next(self):
+    def test_both_zebra_rows_have_full_width_background_and_inner_padding(self):
         Gdk, Gtk, _Pango = _load_gtk()
         buffer = Gtk.TextBuffer()
 
-        plain, tinted = _create_entry_background_tags(buffer, Gdk)
+        first, second = _create_entry_background_tags(buffer, Gdk)
 
-        self.assertEqual(plain.get_property("paragraph-background-rgba").alpha, 0.0)
-        self.assertGreater(tinted.get_property("paragraph-background-rgba").alpha, 0.0)
+        self.assertGreater(first.get_property("paragraph-background-rgba").alpha, 0.0)
+        self.assertGreater(second.get_property("paragraph-background-rgba").alpha, 0.0)
+        for tag in (first, second):
+            self.assertEqual(tag.get_property("left-margin"), 14)
+            self.assertEqual(tag.get_property("right-margin"), 14)
 
     def test_entry_separator_contains_two_visually_empty_lines(self):
         _Gdk, Gtk, _Pango = _load_gtk()

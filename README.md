@@ -37,10 +37,11 @@ In the List tab, timestamps and source-window names are dim, display-only
 labels embedded between entries. They cannot be selected or edited. All quotes
 and comments live in one continuous editable text area. Entries have subtle
 zebra-striping and two empty lines between them, and opening the List tab scrolls
-directly to the newest entry at the bottom. `Copy all` copies only that text,
-without timestamps or source metadata. `Open in Sublime` (or `Ctrl+O`) saves
-current edits, opens `annotations.md` with the installed `subl` command, and
-closes the popup.
+directly to the newest entry at the bottom. Long lines wrap at word boundaries
+instead of scrolling horizontally. `Copy all` copies only that text, without
+timestamps or source metadata. `Open in Sublime` (or `Ctrl+O`) saves current
+edits, opens `annotations.md` with the installed `subl` command, and closes the
+popup.
 
 On first use, existing daily files such as `2026-08-20.md` are copied into the
 continuous list. The original daily files remain untouched as backups.

@@ -108,7 +108,7 @@ def _schedule_list_scroll_to_bottom(*, page_number: int, list_view, idle_add) ->
 
 def _create_entry_background_tags(buffer, Gdk):
     tags = []
-    for alpha in (0.0, 0.08):
+    for alpha in (0.04, 0.09):
         color = Gdk.RGBA()
         color.red = 0.5
         color.green = 0.5
@@ -116,6 +116,8 @@ def _create_entry_background_tags(buffer, Gdk):
         color.alpha = alpha
         tag = buffer.create_tag(None)
         tag.set_property("paragraph-background-rgba", color)
+        tag.set_property("left-margin", 14)
+        tag.set_property("right-margin", 14)
         tags.append(tag)
     return tuple(tags)
 
@@ -126,6 +128,38 @@ def _apply_entry_background(buffer, tag, *, start_offset: int, end_offset: int) 
         buffer.get_iter_at_offset(start_offset),
         buffer.get_iter_at_offset(end_offset),
     )
+
+
+def _configure_list_word_wrap(view, scroll, Gtk) -> None:
+    view.set_wrap_mode(Gtk.WrapMode.WORD)
+    view.set_left_margin(0)
+    view.set_right_margin(0)
+    scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+
+
+def _connect_gutter_draw(view, callback) -> None:
+    view.connect_after("draw", callback)
+
+
+def _draw_entry_gutters(
+    view, context, row_marks, background_tags, Gtk, *, gutter_width: int = 14
+) -> None:
+    buffer = view.get_buffer()
+    view_width = view.get_allocated_width()
+    for index, (start_mark, end_mark) in enumerate(row_marks):
+        start = view.get_iter_location(buffer.get_iter_at_mark(start_mark))
+        end = view.get_iter_location(buffer.get_iter_at_mark(end_mark))
+        _x, top = view.buffer_to_window_coords(Gtk.TextWindowType.TEXT, 0, start.y)
+        _x, bottom = view.buffer_to_window_coords(
+            Gtk.TextWindowType.TEXT, 0, end.y + end.height
+        )
+        color = background_tags[index % len(background_tags)].get_property(
+            "paragraph-background-rgba"
+        )
+        context.set_source_rgba(color.red, color.green, color.blue, color.alpha)
+        context.rectangle(0, top, gutter_width, bottom - top)
+        context.rectangle(view_width - gutter_width, top, gutter_width, bottom - top)
+        context.fill()
 
 
 def _move_popup_to_right_monitor(
@@ -191,6 +225,7 @@ def show_annotation_popup(
             super().__init__(title="Desktop Annotator")
             self.saved_path: Path | None = None
             self.entry_marks = []
+            self.row_marks = []
             self.set_default_size(WINDOW_WIDTH, WINDOW_HEIGHT)
             self.set_position(Gtk.WindowPosition.NONE)
             self.set_keep_above(True)
@@ -240,6 +275,16 @@ def show_annotation_popup(
                 list_view=self.list_view,
                 idle_add=GLib.idle_add,
             )
+
+        def _draw_list_gutters(self, view, context):
+            _draw_entry_gutters(
+                view,
+                context,
+                self.row_marks,
+                self.entry_background_tags,
+                Gtk,
+            )
+            return False
 
         def _text_view(self, text: str = "", *, editable: bool = True):
             view = Gtk.TextView()
@@ -343,9 +388,9 @@ def show_annotation_popup(
             list_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
             list_scroll.set_shadow_type(Gtk.ShadowType.IN)
             self.list_view = self._text_view()
+            _configure_list_word_wrap(self.list_view, list_scroll, Gtk)
+            _connect_gutter_draw(self.list_view, self._draw_list_gutters)
             self.list_view.set_monospace(True)
-            self.list_view.set_left_margin(14)
-            self.list_view.set_right_margin(14)
             self.list_view.set_top_margin(12)
             self.list_view.set_bottom_margin(12)
             self.entry_background_tags = _create_entry_background_tags(
@@ -397,6 +442,7 @@ def show_annotation_popup(
             buffer = self.list_view.get_buffer()
             buffer.set_text("")
             self.entry_marks = []
+            self.row_marks = []
             annotations = parse_annotation_list(load_annotation_list(directory))
             if not annotations:
                 buffer.set_text("No annotations yet. Add one from the Add tab.")
@@ -407,6 +453,9 @@ def show_annotation_popup(
                 if index:
                     _insert_entry_separator(buffer, self.entry_marks[-1][2])
                 entry_start = buffer.get_char_count()
+                row_start_mark = buffer.create_mark(
+                    None, buffer.get_iter_at_offset(entry_start), True
+                )
                 anchor = buffer.create_child_anchor(buffer.get_end_iter())
                 metadata = Gtk.Label(
                     label=f"{annotation.captured_at:%Y-%m-%d %H:%M}  ·  {annotation.source}"
@@ -423,6 +472,7 @@ def show_annotation_popup(
                     buffer, render_editable_body(annotation).rstrip(), ""
                 )
                 self.entry_marks.append((annotation, start_mark, end_mark))
+                self.row_marks.append((row_start_mark, end_mark))
                 _apply_entry_background(
                     buffer,
                     self.entry_background_tags[index % len(self.entry_background_tags)],
