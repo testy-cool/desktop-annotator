@@ -83,6 +83,12 @@ def _insert_marked_text(buffer, text: str, separator: str):
     return start_mark, end_mark
 
 
+def _insert_entry_separator(buffer, previous_end_mark) -> None:
+    previous_end_offset = buffer.get_iter_at_mark(previous_end_mark).get_offset()
+    buffer.insert(buffer.get_end_iter(), "\n\n\n")
+    buffer.move_mark(previous_end_mark, buffer.get_iter_at_offset(previous_end_offset))
+
+
 def _scroll_text_view_to_bottom(view) -> bool:
     buffer = view.get_buffer()
     end_mark = buffer.create_mark(None, buffer.get_end_iter(), False)
@@ -102,7 +108,7 @@ def _schedule_list_scroll_to_bottom(*, page_number: int, list_view, idle_add) ->
 
 def _create_entry_background_tags(buffer, Gdk):
     tags = []
-    for alpha in (0.04, 0.09):
+    for alpha in (0.0, 0.08):
         color = Gdk.RGBA()
         color.red = 0.5
         color.green = 0.5
@@ -399,7 +405,7 @@ def show_annotation_popup(
             self.list_view.set_editable(True)
             for index, annotation in enumerate(annotations):
                 if index:
-                    buffer.insert(buffer.get_end_iter(), "\n")
+                    _insert_entry_separator(buffer, self.entry_marks[-1][2])
                 entry_start = buffer.get_char_count()
                 anchor = buffer.create_child_anchor(buffer.get_end_iter())
                 metadata = Gtk.Label(
@@ -414,7 +420,7 @@ def show_annotation_popup(
                 buffer.insert(buffer.get_end_iter(), "\n")
 
                 start_mark, end_mark = _insert_marked_text(
-                    buffer, render_editable_body(annotation).rstrip(), "\n"
+                    buffer, render_editable_body(annotation).rstrip(), ""
                 )
                 self.entry_marks.append((annotation, start_mark, end_mark))
                 _apply_entry_background(

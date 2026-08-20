@@ -7,6 +7,7 @@ from desktop_annotator.app import (
     _close_after_successful_add,
     _create_entry_background_tags,
     _insert_marked_text,
+    _insert_entry_separator,
     _install_toggle_close,
     _load_gtk,
     _move_popup_to_right_monitor,
@@ -247,6 +248,30 @@ class AnnotationListPresentationTests(unittest.TestCase):
         second_color = second.get_property("paragraph-background-rgba")
         self.assertNotEqual(first_color.alpha, second_color.alpha)
         self.assertLess(max(first_color.alpha, second_color.alpha), 0.15)
+
+    def test_zebra_background_leaves_one_row_plain_and_tints_the_next(self):
+        Gdk, Gtk, _Pango = _load_gtk()
+        buffer = Gtk.TextBuffer()
+
+        plain, tinted = _create_entry_background_tags(buffer, Gdk)
+
+        self.assertEqual(plain.get_property("paragraph-background-rgba").alpha, 0.0)
+        self.assertGreater(tinted.get_property("paragraph-background-rgba").alpha, 0.0)
+
+    def test_entry_separator_contains_two_visually_empty_lines(self):
+        _Gdk, Gtk, _Pango = _load_gtk()
+        buffer = Gtk.TextBuffer()
+        first_start, first_end = _insert_marked_text(buffer, "first", "")
+
+        _insert_entry_separator(buffer, first_end)
+        _insert_marked_text(buffer, "second", "")
+
+        text = buffer.get_text(buffer.get_start_iter(), buffer.get_end_iter(), True)
+        first_text = buffer.get_text(
+            buffer.get_iter_at_mark(first_start), buffer.get_iter_at_mark(first_end), True
+        )
+        self.assertEqual(text, "first\n\n\nsecond")
+        self.assertEqual(first_text, "first")
 
     def test_entry_background_is_applied_to_its_complete_buffer_range(self):
         _Gdk, Gtk, _Pango = _load_gtk()
