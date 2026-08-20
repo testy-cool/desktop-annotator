@@ -12,11 +12,16 @@ from desktop_annotator.annotation import (
     render_editable_body,
 )
 from desktop_annotator.capture import TextCandidate, active_window_title, capture_text_candidates
+from desktop_annotator.positioning import MonitorRect, popup_position
 from desktop_annotator.workflow import (
     annotation_source,
     save_comment,
     save_edited_annotations,
 )
+
+
+WINDOW_WIDTH = 720
+WINDOW_HEIGHT = 620
 
 
 def _load_gtk():
@@ -77,6 +82,42 @@ def _insert_marked_text(buffer, text: str, separator: str):
     return start_mark, end_mark
 
 
+def _move_popup_to_right_monitor(
+    window, Gdk, *, width: int = WINDOW_WIDTH, height: int = WINDOW_HEIGHT
+) -> bool:
+    display = Gdk.Display.get_default()
+    if display is None or display.get_n_monitors() == 0:
+        return False
+
+    seat = display.get_default_seat()
+    pointer = seat.get_pointer() if seat is not None else None
+    if pointer is None:
+        return False
+    _screen, pointer_x, pointer_y = pointer.get_position()
+
+    monitors = []
+    for index in range(display.get_n_monitors()):
+        geometry = display.get_monitor(index).get_geometry()
+        monitors.append(
+            MonitorRect(
+                x=geometry.x,
+                y=geometry.y,
+                width=geometry.width,
+                height=geometry.height,
+            )
+        )
+
+    x, y = popup_position(
+        monitors,
+        pointer_x=pointer_x,
+        pointer_y=pointer_y,
+        width=width,
+        height=height,
+    )
+    window.move(x, y)
+    return True
+
+
 def show_annotation_popup(
     *, candidates: list[TextCandidate], source: str, directory: Path
 ) -> Path | None:
@@ -87,8 +128,8 @@ def show_annotation_popup(
             super().__init__(title="Desktop Annotator")
             self.saved_path: Path | None = None
             self.entry_marks = []
-            self.set_default_size(720, 620)
-            self.set_position(Gtk.WindowPosition.MOUSE)
+            self.set_default_size(WINDOW_WIDTH, WINDOW_HEIGHT)
+            self.set_position(Gtk.WindowPosition.NONE)
             self.set_keep_above(True)
             self.set_type_hint(Gdk.WindowTypeHint.DIALOG)
             self.set_border_width(14)
@@ -379,6 +420,7 @@ def show_annotation_popup(
             return False
 
     window = AnnotationWindow()
+    _move_popup_to_right_monitor(window, Gdk)
     window.show_all()
     window.comment_view.grab_focus()
     window.present()
