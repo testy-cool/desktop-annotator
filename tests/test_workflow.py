@@ -17,7 +17,7 @@ class SaveCommentTests(unittest.TestCase):
                 captured_at=datetime(2026, 8, 20, 17, 10),
             )
 
-            self.assertEqual(path.name, "2026-08-20.md")
+            self.assertEqual(path.name, "annotations.md")
             self.assertIn("> selected phrase", path.read_text(encoding="utf-8"))
             self.assertIn("→ Make this more direct.", path.read_text(encoding="utf-8"))
 

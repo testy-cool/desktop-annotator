@@ -4,6 +4,13 @@ import subprocess
 import time
 import uuid
 from collections.abc import Callable
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class TextCandidate:
+    label: str
+    text: str
 
 
 def _read_x_selection(selection: str) -> str:
@@ -22,6 +29,10 @@ def _read_x_selection(selection: str) -> str:
 
 def read_primary_selection() -> str:
     return _read_x_selection("primary")
+
+
+def read_clipboard_selection() -> str:
+    return _read_x_selection("clipboard")
 
 
 def _write_clipboard(text: str) -> bool:
@@ -72,6 +83,28 @@ def capture_selected_text(
     if selected:
         return selected
     return clipboard_copy().strip()
+
+
+def capture_text_candidates(
+    primary_reader: Callable[[], str] | None = None,
+    clipboard_reader: Callable[[], str] | None = None,
+    clipboard_copy: Callable[[], str] | None = None,
+) -> list[TextCandidate]:
+    primary_reader = primary_reader or read_primary_selection
+    clipboard_reader = clipboard_reader or read_clipboard_selection
+    clipboard_copy = clipboard_copy or copy_focused_selection
+
+    clipboard = clipboard_reader().strip()
+    selection = primary_reader().strip()
+    if not selection:
+        selection = clipboard_copy().strip()
+
+    candidates = []
+    if selection:
+        candidates.append(TextCandidate(label="Selected text", text=selection))
+    if clipboard and clipboard != selection:
+        candidates.append(TextCandidate(label="Clipboard", text=clipboard))
+    return candidates
 
 
 def active_window_title() -> str:
