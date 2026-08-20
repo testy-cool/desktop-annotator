@@ -6,16 +6,16 @@ from pathlib import Path
 
 from desktop_annotator.annotation import (
     Annotation,
-    copyable_annotation_list,
     load_annotation_list,
     parse_annotation_list,
+    parse_editable_body,
+    render_editable_body,
 )
 from desktop_annotator.capture import TextCandidate, active_window_title, capture_text_candidates
 from desktop_annotator.workflow import (
     annotation_source,
     save_comment,
     save_edited_annotations,
-    update_annotation,
 )
 
 
@@ -54,6 +54,29 @@ def _show_list_page(notebook) -> None:
     notebook.set_current_page(1)
 
 
+def _build_sublime_command(path: Path) -> list[str]:
+    return ["subl", "--", str(path)]
+
+
+def _launch_sublime(path: Path) -> None:
+    subprocess.Popen(
+        _build_sublime_command(path),
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+
+
+def _insert_marked_text(buffer, text: str, separator: str):
+    start_mark = buffer.create_mark(None, buffer.get_end_iter(), True)
+    buffer.insert(buffer.get_end_iter(), text)
+    end_offset = buffer.get_char_count()
+    buffer.insert(buffer.get_end_iter(), separator)
+    end_mark = buffer.create_mark(None, buffer.get_iter_at_offset(end_offset), False)
+    return start_mark, end_mark
+
+
 def show_annotation_popup(
     *, candidates: list[TextCandidate], source: str, directory: Path
 ) -> Path | None:
@@ -63,7 +86,7 @@ def show_annotation_popup(
         def __init__(self):
             super().__init__(title="Desktop Annotator")
             self.saved_path: Path | None = None
-            self.entry_widgets = []
+            self.entry_marks = []
             self.set_default_size(720, 620)
             self.set_position(Gtk.WindowPosition.MOUSE)
             self.set_keep_above(True)
@@ -77,6 +100,34 @@ def show_annotation_popup(
             self._build_add_page()
             self._build_list_page()
             self._reload_list()
+            self._install_accelerators()
+
+        def _install_accelerators(self):
+            accelerators = Gtk.AccelGroup()
+            self.add_accel_group(accelerators)
+            accelerators.connect(
+                Gdk.KEY_l,
+                Gdk.ModifierType.CONTROL_MASK,
+                Gtk.AccelFlags.VISIBLE,
+                self._open_list_accelerator,
+            )
+            accelerators.connect(
+                Gdk.KEY_o,
+                Gdk.ModifierType.CONTROL_MASK,
+                Gtk.AccelFlags.VISIBLE,
+                self._open_sublime_accelerator,
+            )
+
+        def _open_list_accelerator(self, *_args):
+            _show_list_page(self.notebook)
+            self.list_view.grab_focus()
+            return True
+
+        def _open_sublime_accelerator(self, *_args):
+            if self.notebook.get_current_page() == 1:
+                self._open_in_sublime()
+                return True
+            return False
 
         def _text_view(self, text: str = "", *, editable: bool = True):
             view = Gtk.TextView()
@@ -164,6 +215,9 @@ def show_annotation_popup(
             title.set_markup("<b>Continuous annotation list</b>")
             title.set_halign(Gtk.Align.START)
             header.pack_start(title, True, True, 0)
+            sublime = Gtk.Button(label="Open in Sublime")
+            sublime.connect("clicked", self._open_in_sublime)
+            header.pack_start(sublime, False, False, 0)
             copy = Gtk.Button(label="Copy all")
             copy.connect("clicked", self._copy_all)
             header.pack_start(copy, False, False, 0)
@@ -174,14 +228,21 @@ def show_annotation_popup(
             layout.pack_start(header, False, False, 0)
 
             list_scroll = Gtk.ScrolledWindow()
-            list_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-            self.entries_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
-            self.entries_box.set_border_width(2)
-            list_scroll.add(self.entries_box)
+            list_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+            list_scroll.set_shadow_type(Gtk.ShadowType.IN)
+            self.list_view = self._text_view()
+            self.list_view.set_monospace(True)
+            self.list_view.set_left_margin(14)
+            self.list_view.set_right_margin(14)
+            self.list_view.set_top_margin(12)
+            self.list_view.set_bottom_margin(12)
+            list_scroll.add(self.list_view)
             layout.pack_start(list_scroll, True, True, 0)
 
             footer = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-            self.list_status = Gtk.Label(label="Timestamps are display-only · Ctrl+Enter saves edits")
+            self.list_status = Gtk.Label(
+                label="Timestamps are display-only · Ctrl+Enter saves · Ctrl+O opens Sublime"
+            )
             self.list_status.set_halign(Gtk.Align.START)
             self.list_status.get_style_context().add_class("dim-label")
             footer.pack_start(self.list_status, True, True, 0)
@@ -218,49 +279,43 @@ def show_annotation_popup(
             _close_after_successful_add(self)
 
         def _reload_list(self):
-            for child in self.entries_box.get_children():
-                self.entries_box.remove(child)
-            self.entry_widgets = []
+            buffer = self.list_view.get_buffer()
+            buffer.set_text("")
+            self.entry_marks = []
             annotations = parse_annotation_list(load_annotation_list(directory))
             if not annotations:
-                empty = Gtk.Label(label="No annotations yet.")
-                empty.set_margin_top(30)
-                empty.get_style_context().add_class("dim-label")
-                self.entries_box.pack_start(empty, False, False, 0)
-            for annotation in annotations:
-                frame = Gtk.Frame()
-                card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-                card.set_border_width(10)
-                frame.add(card)
-
+                buffer.set_text("No annotations yet. Add one from the Add tab.")
+                self.list_view.set_editable(False)
+                return
+            self.list_view.set_editable(True)
+            for index, annotation in enumerate(annotations):
+                if index:
+                    buffer.insert(buffer.get_end_iter(), "\n")
+                anchor = buffer.create_child_anchor(buffer.get_end_iter())
                 metadata = Gtk.Label(
                     label=f"{annotation.captured_at:%Y-%m-%d %H:%M}  ·  {annotation.source}"
                 )
                 metadata.set_halign(Gtk.Align.START)
                 metadata.set_selectable(False)
-                metadata.set_ellipsize(Pango.EllipsizeMode.END)
                 metadata.get_style_context().add_class("dim-label")
-                card.pack_start(metadata, False, False, 0)
+                metadata.set_margin_top(5)
+                metadata.set_margin_bottom(5)
+                self.list_view.add_child_at_anchor(metadata, anchor)
+                buffer.insert(buffer.get_end_iter(), "\n")
 
-                quote_view = self._text_view(annotation.quote)
-                card.pack_start(self._scroll_for(quote_view, minimum_height=62), False, False, 0)
-                comment_view = self._text_view(annotation.comment)
-                card.pack_start(self._scroll_for(comment_view, minimum_height=62), False, False, 0)
-
-                self.entry_widgets.append((annotation, quote_view, comment_view))
-                self.entries_box.pack_start(frame, False, False, 0)
-            self.entries_box.show_all()
+                start_mark, end_mark = _insert_marked_text(
+                    buffer, render_editable_body(annotation).rstrip(), "\n"
+                )
+                self.entry_marks.append((annotation, start_mark, end_mark))
+            self.list_view.show_all()
 
         def _edited_annotations(self) -> list[Annotation]:
+            buffer = self.list_view.get_buffer()
             edited = []
-            for original, quote_view, comment_view in self.entry_widgets:
-                edited.append(
-                    update_annotation(
-                        original,
-                        quote=self._buffer_text(quote_view),
-                        comment=self._buffer_text(comment_view),
-                    )
-                )
+            for original, start_mark, end_mark in self.entry_marks:
+                start = buffer.get_iter_at_mark(start_mark)
+                end = buffer.get_iter_at_mark(end_mark)
+                edited.append(parse_editable_body(original, buffer.get_text(start, end, True)))
             return edited
 
         def _save_edits(self, _button=None):
@@ -271,26 +326,35 @@ def show_annotation_popup(
                 return
             self.saved_path = save_edited_annotations(annotations, directory)
             self.list_status.set_text("Edits saved.")
+            return True
 
         def _copy_all(self, _button=None):
             try:
-                text = copyable_annotation_list(self._edited_annotations())
+                annotations = self._edited_annotations()
             except ValueError:
                 self.list_status.set_text("Fix empty quotes or comments before copying.")
                 return
+            text = "\n".join(render_editable_body(annotation) for annotation in annotations)
             clipboard = Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD)
             clipboard.set_text(text, -1)
             clipboard.store()
             self.list_status.set_text("Copied quotes and comments without timestamps.")
+
+        def _open_in_sublime(self, _button=None):
+            if not self._save_edits():
+                return
+            try:
+                _launch_sublime(self.saved_path)
+            except OSError:
+                self.list_status.set_text("Could not launch Sublime Text with the subl command.")
+                return
+            self.close()
 
         def _on_key_press(self, _widget, event):
             if event.keyval == Gdk.KEY_Escape:
                 self.close()
                 return True
             if event.state & Gdk.ModifierType.CONTROL_MASK:
-                if event.keyval in (Gdk.KEY_l, Gdk.KEY_L):
-                    _show_list_page(self.notebook)
-                    return True
                 if event.keyval in (Gdk.KEY_1, Gdk.KEY_2):
                     index = 0 if event.keyval == Gdk.KEY_1 else 1
                     if index < len(candidates):

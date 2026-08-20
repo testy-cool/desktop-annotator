@@ -77,6 +77,21 @@ def copyable_annotation_list(annotations: list[Annotation]) -> str:
     return "\n".join(entries)
 
 
+def render_editable_body(annotation: Annotation) -> str:
+    return copyable_annotation_list([annotation])
+
+
+def parse_editable_body(original: Annotation, text: str) -> Annotation:
+    document = (
+        f"## {original.captured_at:%Y-%m-%d %H:%M} · {original.source}\n\n"
+        f"{text.strip()}\n"
+    )
+    parsed = parse_annotation_list(document)
+    if len(parsed) != 1:
+        raise ValueError("entry must contain a quoted passage and comment")
+    return parsed[0]
+
+
 def _ensure_directory(directory: Path) -> None:
     directory.mkdir(mode=0o700, parents=True, exist_ok=True)
 

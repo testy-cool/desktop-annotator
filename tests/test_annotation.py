@@ -9,8 +9,10 @@ from desktop_annotator.annotation import (
     copyable_annotation_list,
     load_annotation_list,
     parse_annotation_list,
+    parse_editable_body,
     render_annotation,
     render_annotation_list,
+    render_editable_body,
     save_annotation_list,
 )
 
@@ -137,6 +139,38 @@ class StructuredAnnotationListTests(unittest.TestCase):
         self.assertEqual(copied, "> Selected phrase\n\n→ Change this.\n")
         self.assertNotIn("2026", copied)
         self.assertNotIn("Firefox", copied)
+
+    def test_editable_body_has_no_timestamp_or_source_text(self):
+        entry = Annotation(
+            quote="First line\nSecond line",
+            comment="Editable comment",
+            source="Firefox",
+            captured_at=datetime(2026, 8, 20, 18, 4),
+        )
+
+        body = render_editable_body(entry)
+
+        self.assertEqual(body, "> First line\n> Second line\n\n→ Editable comment\n")
+        self.assertNotIn("2026", body)
+        self.assertNotIn("Firefox", body)
+
+    def test_parses_one_long_editor_body_without_changing_metadata(self):
+        original = Annotation(
+            quote="Old quote",
+            comment="Old comment",
+            source="Clipboard · Firefox",
+            captured_at=datetime(2026, 8, 20, 18, 4),
+        )
+
+        edited = parse_editable_body(
+            original,
+            "> Edited first line\n> Edited second line\n\n→ Edited comment\ncontinued",
+        )
+
+        self.assertEqual(edited.quote, "Edited first line\nEdited second line")
+        self.assertEqual(edited.comment, "Edited comment\ncontinued")
+        self.assertEqual(edited.source, original.source)
+        self.assertEqual(edited.captured_at, original.captured_at)
 
 
 if __name__ == "__main__":

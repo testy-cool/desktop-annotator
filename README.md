@@ -29,9 +29,11 @@ The annotation directory and files are created with private user-only
 permissions. Set `ANNOTATIONS_DIR` to use a different directory.
 
 In the List tab, timestamps and source-window names are dim, display-only
-labels. They cannot be selected or edited. Quotes and comments remain editable.
-`Copy all` copies only the quotes and comments, without timestamps or source
-metadata.
+labels embedded between entries. They cannot be selected or edited. All quotes
+and comments live in one continuous editable text area. `Copy all` copies only
+that text, without timestamps or source metadata. `Open in Sublime` (or
+`Ctrl+O`) saves current edits, opens `annotations.md` with the installed `subl`
+command, and closes the popup.
 
 On first use, existing daily files such as `2026-08-20.md` are copied into the
 continuous list. The original daily files remain untouched as backups.
