@@ -46,6 +46,14 @@ def _show_no_selection_message() -> None:
         pass
 
 
+def _close_after_successful_add(window) -> None:
+    window.close()
+
+
+def _show_list_page(notebook) -> None:
+    notebook.set_current_page(1)
+
+
 def show_annotation_popup(
     *, candidates: list[TextCandidate], source: str, directory: Path
 ) -> Path | None:
@@ -129,7 +137,9 @@ def show_annotation_popup(
             layout.pack_start(comment_scroll, True, True, 0)
 
             footer = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-            self.add_status = Gtk.Label(label="Ctrl+Enter adds · Ctrl+1/2 switches source · Esc closes")
+            self.add_status = Gtk.Label(
+                label="Ctrl+Enter adds · Ctrl+L opens list · Ctrl+1/2 switches source"
+            )
             self.add_status.set_halign(Gtk.Align.START)
             self.add_status.get_style_context().add_class("dim-label")
             footer.pack_start(self.add_status, True, True, 0)
@@ -205,12 +215,7 @@ def show_annotation_popup(
                 self.add_status.set_text("Write a comment before adding this entry.")
                 self.comment_view.grab_focus()
                 return
-            self.comment_view.get_buffer().set_text("")
-            self._reload_list()
-            self.notebook.set_current_page(1)
-            self.list_status.set_text("Annotation added. Edit, copy, or close when finished.")
-            if self.entry_widgets:
-                self.entry_widgets[-1][2].grab_focus()
+            _close_after_successful_add(self)
 
         def _reload_list(self):
             for child in self.entries_box.get_children():
@@ -283,6 +288,9 @@ def show_annotation_popup(
                 self.close()
                 return True
             if event.state & Gdk.ModifierType.CONTROL_MASK:
+                if event.keyval in (Gdk.KEY_l, Gdk.KEY_L):
+                    _show_list_page(self.notebook)
+                    return True
                 if event.keyval in (Gdk.KEY_1, Gdk.KEY_2):
                     index = 0 if event.keyval == Gdk.KEY_1 else 1
                     if index < len(candidates):

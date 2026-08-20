@@ -9,9 +9,11 @@ desktop, add comments, and keep them in one editable Markdown list.
 2. Press `Ctrl+Alt+A`.
 3. Choose `Selected text` or `Clipboard` when both are available. `Ctrl+1`
    and `Ctrl+2` switch between them.
-4. Write a comment and press `Ctrl+Enter` to add it.
-5. The popup switches to the continuous list. Edit any quote or comment, then
-   press `Ctrl+Enter` or `Save edits`. Press `Esc` to close.
+4. Write a comment and press `Ctrl+Enter` to add it. The popup closes
+   immediately after saving.
+5. To review the accumulated annotations later, open the tool again and choose
+   the List tab or press `Ctrl+L`. Edit any quote or comment, then press
+   `Ctrl+Enter` or `Save edits`.
 
 Annotations are appended to `~/Annotations/annotations.md`:
 
