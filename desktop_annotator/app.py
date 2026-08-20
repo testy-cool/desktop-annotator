@@ -11,6 +11,7 @@ from desktop_annotator.workflow import save_comment
 def _load_gtk():
     import gi
 
+    gi.require_version("Gdk", "3.0")
     gi.require_version("Gtk", "3.0")
     from gi.repository import Gdk, Gtk, Pango
 
@@ -159,4 +160,3 @@ def main() -> int:
     directory = Path(os.environ.get("ANNOTATIONS_DIR", "~/Annotations")).expanduser()
     show_annotation_popup(quote=quote, source=source, directory=directory)
     return 0
-
