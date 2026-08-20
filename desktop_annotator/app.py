@@ -83,6 +83,45 @@ def _insert_marked_text(buffer, text: str, separator: str):
     return start_mark, end_mark
 
 
+def _scroll_text_view_to_bottom(view) -> bool:
+    buffer = view.get_buffer()
+    end_mark = buffer.create_mark(None, buffer.get_end_iter(), False)
+    view.scroll_to_mark(end_mark, 0.0, True, 0.0, 1.0)
+    buffer.delete_mark(end_mark)
+    adjustment = view.get_vadjustment()
+    adjustment.set_value(max(0.0, adjustment.get_upper() - adjustment.get_page_size()))
+    return False
+
+
+def _schedule_list_scroll_to_bottom(*, page_number: int, list_view, idle_add) -> bool:
+    if page_number != 1:
+        return False
+    idle_add(_scroll_text_view_to_bottom, list_view)
+    return True
+
+
+def _create_entry_background_tags(buffer, Gdk):
+    tags = []
+    for alpha in (0.04, 0.09):
+        color = Gdk.RGBA()
+        color.red = 0.5
+        color.green = 0.5
+        color.blue = 0.5
+        color.alpha = alpha
+        tag = buffer.create_tag(None)
+        tag.set_property("paragraph-background-rgba", color)
+        tags.append(tag)
+    return tuple(tags)
+
+
+def _apply_entry_background(buffer, tag, *, start_offset: int, end_offset: int) -> None:
+    buffer.apply_tag(
+        tag,
+        buffer.get_iter_at_offset(start_offset),
+        buffer.get_iter_at_offset(end_offset),
+    )
+
+
 def _move_popup_to_right_monitor(
     window, Gdk, *, width: int = WINDOW_WIDTH, height: int = WINDOW_HEIGHT
 ) -> bool:
@@ -158,6 +197,7 @@ def show_annotation_popup(
             self.add(self.notebook)
             self._build_add_page()
             self._build_list_page()
+            self.notebook.connect("switch-page", self._notebook_page_changed)
             self._reload_list()
             self._install_accelerators()
 
@@ -187,6 +227,13 @@ def show_annotation_popup(
                 self._open_in_sublime()
                 return True
             return False
+
+        def _notebook_page_changed(self, _notebook, _page, page_number):
+            _schedule_list_scroll_to_bottom(
+                page_number=page_number,
+                list_view=self.list_view,
+                idle_add=GLib.idle_add,
+            )
 
         def _text_view(self, text: str = "", *, editable: bool = True):
             view = Gtk.TextView()
@@ -295,6 +342,9 @@ def show_annotation_popup(
             self.list_view.set_right_margin(14)
             self.list_view.set_top_margin(12)
             self.list_view.set_bottom_margin(12)
+            self.entry_background_tags = _create_entry_background_tags(
+                self.list_view.get_buffer(), Gdk
+            )
             list_scroll.add(self.list_view)
             layout.pack_start(list_scroll, True, True, 0)
 
@@ -350,6 +400,7 @@ def show_annotation_popup(
             for index, annotation in enumerate(annotations):
                 if index:
                     buffer.insert(buffer.get_end_iter(), "\n")
+                entry_start = buffer.get_char_count()
                 anchor = buffer.create_child_anchor(buffer.get_end_iter())
                 metadata = Gtk.Label(
                     label=f"{annotation.captured_at:%Y-%m-%d %H:%M}  ·  {annotation.source}"
@@ -366,6 +417,12 @@ def show_annotation_popup(
                     buffer, render_editable_body(annotation).rstrip(), "\n"
                 )
                 self.entry_marks.append((annotation, start_mark, end_mark))
+                _apply_entry_background(
+                    buffer,
+                    self.entry_background_tags[index % len(self.entry_background_tags)],
+                    start_offset=entry_start,
+                    end_offset=buffer.get_char_count(),
+                )
             self.list_view.show_all()
 
         def _edited_annotations(self) -> list[Annotation]:

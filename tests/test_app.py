@@ -2,12 +2,16 @@ import unittest
 from pathlib import Path
 
 from desktop_annotator.app import (
+    _apply_entry_background,
     _build_sublime_command,
     _close_after_successful_add,
+    _create_entry_background_tags,
     _insert_marked_text,
     _install_toggle_close,
     _load_gtk,
     _move_popup_to_right_monitor,
+    _schedule_list_scroll_to_bottom,
+    _scroll_text_view_to_bottom,
     _show_list_page,
 )
 
@@ -158,6 +162,102 @@ class PopupToggleTests(unittest.TestCase):
 
         self.assertFalse(close_already_requested)
         self.assertEqual(scheduled, [window.close])
+
+
+class AnnotationListPresentationTests(unittest.TestCase):
+    def test_bottom_scroll_includes_the_text_views_bottom_margin(self):
+        class Adjustment:
+            value = None
+
+            def get_upper(self):
+                return 500
+
+            def get_page_size(self):
+                return 120
+
+            def set_value(self, value):
+                self.value = value
+
+        class Buffer:
+            mark = object()
+
+            def get_end_iter(self):
+                return object()
+
+            def create_mark(self, *_args):
+                return self.mark
+
+            def delete_mark(self, _mark):
+                pass
+
+        class View:
+            adjustment = Adjustment()
+            buffer = Buffer()
+
+            def get_buffer(self):
+                return self.buffer
+
+            def scroll_to_mark(self, *_args):
+                pass
+
+            def get_vadjustment(self):
+                return self.adjustment
+
+        view = View()
+
+        _scroll_text_view_to_bottom(view)
+
+        self.assertEqual(view.adjustment.value, 380)
+
+    def test_opening_list_page_schedules_scroll_to_buffer_end(self):
+        scheduled = []
+        view = object()
+
+        did_schedule = _schedule_list_scroll_to_bottom(
+            page_number=1,
+            list_view=view,
+            idle_add=lambda callback, argument: scheduled.append((callback, argument)),
+        )
+
+        self.assertTrue(did_schedule)
+        self.assertEqual(len(scheduled), 1)
+        callback, argument = scheduled[0]
+        self.assertIs(argument, view)
+        self.assertEqual(callback.__name__, "_scroll_text_view_to_bottom")
+
+    def test_non_list_page_does_not_schedule_scroll(self):
+        scheduled = []
+
+        did_schedule = _schedule_list_scroll_to_bottom(
+            page_number=0,
+            list_view=object(),
+            idle_add=lambda *_args: scheduled.append(True),
+        )
+
+        self.assertFalse(did_schedule)
+        self.assertEqual(scheduled, [])
+
+    def test_alternating_entry_tags_have_different_subtle_backgrounds(self):
+        Gdk, Gtk, _Pango = _load_gtk()
+        buffer = Gtk.TextBuffer()
+
+        first, second = _create_entry_background_tags(buffer, Gdk)
+
+        first_color = first.get_property("paragraph-background-rgba")
+        second_color = second.get_property("paragraph-background-rgba")
+        self.assertNotEqual(first_color.alpha, second_color.alpha)
+        self.assertLess(max(first_color.alpha, second_color.alpha), 0.15)
+
+    def test_entry_background_is_applied_to_its_complete_buffer_range(self):
+        _Gdk, Gtk, _Pango = _load_gtk()
+        buffer = Gtk.TextBuffer()
+        buffer.set_text("first entry\n\nsecond entry")
+        tag = buffer.create_tag(None)
+
+        _apply_entry_background(buffer, tag, start_offset=0, end_offset=12)
+
+        self.assertIn(tag, buffer.get_iter_at_offset(2).get_tags())
+        self.assertNotIn(tag, buffer.get_iter_at_offset(15).get_tags())
 
 
 if __name__ == "__main__":
