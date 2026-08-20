@@ -1,19 +1,22 @@
 # Desktop Annotator
 
-Capture a selected piece of text from any application on a Linux Mint X11
-desktop, add a comment, and save the pair as Markdown.
+Capture selected or copied text from any application on a Linux Mint X11
+desktop, add comments, and keep them in one editable Markdown list.
 
 ## Use
 
-1. Select text in a browser, editor, PDF viewer, terminal, or another app.
+1. Select or copy text in a browser, editor, PDF viewer, terminal, or another app.
 2. Press `Ctrl+Alt+A`.
-3. Write a comment in the popup.
-4. Press `Ctrl+Enter` to save, or `Esc` to cancel.
+3. Choose `Selected text` or `Clipboard` when both are available. `Ctrl+1`
+   and `Ctrl+2` switch between them.
+4. Write a comment and press `Ctrl+Enter` to add it.
+5. The popup switches to the continuous list. Edit any quote or comment, then
+   press `Ctrl+Enter` or `Save edits`. Press `Esc` to close.
 
-Annotations are appended to `~/Annotations/YYYY-MM-DD.md`:
+Annotations are appended to `~/Annotations/annotations.md`:
 
 ```markdown
-## 16:42 · Firefox — Agent response
+## 2026-08-20 16:42 · Firefox — Agent response
 
 > The selected text appears here.
 
@@ -23,12 +26,21 @@ Annotations are appended to `~/Annotations/YYYY-MM-DD.md`:
 The annotation directory and files are created with private user-only
 permissions. Set `ANNOTATIONS_DIR` to use a different directory.
 
+In the List tab, timestamps and source-window names are dim, display-only
+labels. They cannot be selected or edited. Quotes and comments remain editable.
+`Copy all` copies only the quotes and comments, without timestamps or source
+metadata.
+
+On first use, existing daily files such as `2026-08-20.md` are copied into the
+continuous list. The original daily files remain untouched as backups.
+
 ## How capture works
 
 On X11, selecting text usually publishes it to the `PRIMARY` selection. The
-tool reads that selection only when launched. If it is empty, the tool briefly
-uses `Ctrl+C`, reads the clipboard, and restores the clipboard's previous
-contents. It does not run continuously or monitor typing.
+tool reads both that selection and the live `CLIPBOARD` only when launched. If
+PRIMARY is empty, it briefly uses `Ctrl+C` to cover applications that do not
+publish PRIMARY, then restores the clipboard's previous contents. It does not
+run continuously or monitor typing.
 
 ## Requirements
 

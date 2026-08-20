@@ -4,8 +4,19 @@ import os
 import subprocess
 from pathlib import Path
 
-from desktop_annotator.capture import active_window_title, capture_selected_text
-from desktop_annotator.workflow import save_comment
+from desktop_annotator.annotation import (
+    Annotation,
+    copyable_annotation_list,
+    load_annotation_list,
+    parse_annotation_list,
+)
+from desktop_annotator.capture import TextCandidate, active_window_title, capture_text_candidates
+from desktop_annotator.workflow import (
+    annotation_source,
+    save_comment,
+    save_edited_annotations,
+    update_annotation,
+)
 
 
 def _load_gtk():
@@ -25,7 +36,7 @@ def _show_no_selection_message() -> None:
                 "zenity",
                 "--warning",
                 "--title=Desktop Annotator",
-                "--text=Select some text, then press the annotation shortcut again.",
+                "--text=Select or copy some text, then press the annotation shortcut again.",
                 "--width=420",
             ],
             check=False,
@@ -35,110 +46,263 @@ def _show_no_selection_message() -> None:
         pass
 
 
-def show_annotation_popup(*, quote: str, source: str, directory: Path) -> Path | None:
+def show_annotation_popup(
+    *, candidates: list[TextCandidate], source: str, directory: Path
+) -> Path | None:
     Gdk, Gtk, Pango = _load_gtk()
 
     class AnnotationWindow(Gtk.Window):
         def __init__(self):
             super().__init__(title="Desktop Annotator")
             self.saved_path: Path | None = None
-            self.set_default_size(620, 430)
+            self.entry_widgets = []
+            self.set_default_size(720, 620)
             self.set_position(Gtk.WindowPosition.MOUSE)
             self.set_keep_above(True)
             self.set_type_hint(Gdk.WindowTypeHint.DIALOG)
-            self.set_border_width(18)
+            self.set_border_width(14)
             self.connect("destroy", Gtk.main_quit)
             self.connect("key-press-event", self._on_key_press)
 
+            self.notebook = Gtk.Notebook()
+            self.add(self.notebook)
+            self._build_add_page()
+            self._build_list_page()
+            self._reload_list()
+
+        def _text_view(self, text: str = "", *, editable: bool = True):
+            view = Gtk.TextView()
+            view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
+            view.set_editable(editable)
+            view.set_cursor_visible(editable)
+            view.set_left_margin(10)
+            view.set_right_margin(10)
+            view.set_top_margin(8)
+            view.set_bottom_margin(8)
+            view.get_buffer().set_text(text)
+            return view
+
+        def _scroll_for(self, child, *, minimum_height: int):
+            scroll = Gtk.ScrolledWindow()
+            scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+            scroll.set_min_content_height(minimum_height)
+            scroll.set_shadow_type(Gtk.ShadowType.IN)
+            scroll.add(child)
+            return scroll
+
+        def _build_add_page(self):
             layout = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
-            self.add(layout)
+            layout.set_border_width(14)
+            self.notebook.append_page(layout, Gtk.Label(label="Add"))
 
             title = Gtk.Label()
-            title.set_markup("<b>Comment on this selection</b>")
+            title.set_markup("<b>Add to the annotation list</b>")
             title.set_halign(Gtk.Align.START)
             layout.pack_start(title, False, False, 0)
 
-            source_label = Gtk.Label(label=source)
-            source_label.set_halign(Gtk.Align.START)
-            source_label.set_ellipsize(Pango.EllipsizeMode.END)
-            source_label.get_style_context().add_class("dim-label")
-            layout.pack_start(source_label, False, False, 0)
+            source_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+            source_row.pack_start(Gtk.Label(label="Use"), False, False, 0)
+            self.candidate_picker = Gtk.ComboBoxText()
+            for candidate in candidates:
+                self.candidate_picker.append_text(candidate.label)
+            self.candidate_picker.set_active(0)
+            self.candidate_picker.connect("changed", self._candidate_changed)
+            source_row.pack_start(self.candidate_picker, False, False, 0)
+            self.source_label = Gtk.Label(label=source)
+            self.source_label.set_halign(Gtk.Align.START)
+            self.source_label.set_ellipsize(Pango.EllipsizeMode.END)
+            self.source_label.get_style_context().add_class("dim-label")
+            source_row.pack_start(self.source_label, True, True, 0)
+            layout.pack_start(source_row, False, False, 0)
 
-            quote_scroll = Gtk.ScrolledWindow()
-            quote_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-            quote_scroll.set_min_content_height(120)
-            quote_scroll.set_max_content_height(170)
-            quote_scroll.set_shadow_type(Gtk.ShadowType.IN)
-            quote_view = Gtk.TextView()
-            quote_view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
-            quote_view.set_editable(False)
-            quote_view.set_cursor_visible(False)
-            quote_view.set_left_margin(10)
-            quote_view.set_right_margin(10)
-            quote_view.set_top_margin(8)
-            quote_view.set_bottom_margin(8)
-            quote_view.get_buffer().set_text(quote)
-            quote_scroll.add(quote_view)
+            self.quote_view = self._text_view(candidates[0].text, editable=False)
+            quote_scroll = self._scroll_for(self.quote_view, minimum_height=150)
+            quote_scroll.set_max_content_height(210)
             layout.pack_start(quote_scroll, True, True, 0)
 
             prompt = Gtk.Label(label="Your comment")
             prompt.set_halign(Gtk.Align.START)
             layout.pack_start(prompt, False, False, 0)
 
-            comment_scroll = Gtk.ScrolledWindow()
-            comment_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-            comment_scroll.set_min_content_height(105)
-            comment_scroll.set_shadow_type(Gtk.ShadowType.IN)
-            self.comment_view = Gtk.TextView()
-            self.comment_view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
-            self.comment_view.set_left_margin(10)
-            self.comment_view.set_right_margin(10)
-            self.comment_view.set_top_margin(8)
-            self.comment_view.set_bottom_margin(8)
-            comment_scroll.add(self.comment_view)
+            self.comment_view = self._text_view()
+            comment_scroll = self._scroll_for(self.comment_view, minimum_height=120)
             layout.pack_start(comment_scroll, True, True, 0)
 
             footer = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-            self.status = Gtk.Label(label="Ctrl+Enter saves · Esc cancels")
-            self.status.set_halign(Gtk.Align.START)
-            self.status.get_style_context().add_class("dim-label")
-            footer.pack_start(self.status, True, True, 0)
+            self.add_status = Gtk.Label(label="Ctrl+Enter adds · Ctrl+1/2 switches source · Esc closes")
+            self.add_status.set_halign(Gtk.Align.START)
+            self.add_status.get_style_context().add_class("dim-label")
+            footer.pack_start(self.add_status, True, True, 0)
 
-            cancel = Gtk.Button(label="Cancel")
-            cancel.connect("clicked", lambda _button: self.close())
-            footer.pack_start(cancel, False, False, 0)
+            close = Gtk.Button(label="Close")
+            close.connect("clicked", lambda _button: self.close())
+            footer.pack_start(close, False, False, 0)
 
-            save = Gtk.Button(label="Save annotation")
+            save = Gtk.Button(label="Add to list")
             save.get_style_context().add_class("suggested-action")
-            save.connect("clicked", self._save)
+            save.connect("clicked", self._add_annotation)
             footer.pack_start(save, False, False, 0)
             layout.pack_start(footer, False, False, 0)
 
-        def _comment(self) -> str:
-            buffer = self.comment_view.get_buffer()
+        def _build_list_page(self):
+            layout = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+            layout.set_border_width(14)
+            self.notebook.append_page(layout, Gtk.Label(label="List"))
+
+            header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+            title = Gtk.Label()
+            title.set_markup("<b>Continuous annotation list</b>")
+            title.set_halign(Gtk.Align.START)
+            header.pack_start(title, True, True, 0)
+            copy = Gtk.Button(label="Copy all")
+            copy.connect("clicked", self._copy_all)
+            header.pack_start(copy, False, False, 0)
+            save = Gtk.Button(label="Save edits")
+            save.get_style_context().add_class("suggested-action")
+            save.connect("clicked", self._save_edits)
+            header.pack_start(save, False, False, 0)
+            layout.pack_start(header, False, False, 0)
+
+            list_scroll = Gtk.ScrolledWindow()
+            list_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+            self.entries_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+            self.entries_box.set_border_width(2)
+            list_scroll.add(self.entries_box)
+            layout.pack_start(list_scroll, True, True, 0)
+
+            footer = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+            self.list_status = Gtk.Label(label="Timestamps are display-only · Ctrl+Enter saves edits")
+            self.list_status.set_halign(Gtk.Align.START)
+            self.list_status.get_style_context().add_class("dim-label")
+            footer.pack_start(self.list_status, True, True, 0)
+            close = Gtk.Button(label="Close")
+            close.connect("clicked", lambda _button: self.close())
+            footer.pack_start(close, False, False, 0)
+            layout.pack_start(footer, False, False, 0)
+
+        def _buffer_text(self, view) -> str:
+            buffer = view.get_buffer()
             return buffer.get_text(buffer.get_start_iter(), buffer.get_end_iter(), True)
 
-        def _save(self, _button=None) -> None:
+        def _candidate(self) -> TextCandidate:
+            return candidates[self.candidate_picker.get_active()]
+
+        def _candidate_changed(self, _picker=None):
+            candidate = self._candidate()
+            self.quote_view.get_buffer().set_text(candidate.text)
+            self.source_label.set_text(annotation_source(candidate.label, source))
+
+        def _add_annotation(self, _button=None) -> None:
+            candidate = self._candidate()
             try:
                 self.saved_path = save_comment(
-                    quote=quote,
-                    comment=self._comment(),
-                    source=source,
+                    quote=candidate.text,
+                    comment=self._buffer_text(self.comment_view),
+                    source=annotation_source(candidate.label, source),
                     directory=directory,
                 )
             except ValueError:
-                self.status.set_text("Write a comment before saving.")
+                self.add_status.set_text("Write a comment before adding this entry.")
                 self.comment_view.grab_focus()
                 return
-            self.close()
+            self.comment_view.get_buffer().set_text("")
+            self._reload_list()
+            self.notebook.set_current_page(1)
+            self.list_status.set_text("Annotation added. Edit, copy, or close when finished.")
+            if self.entry_widgets:
+                self.entry_widgets[-1][2].grab_focus()
+
+        def _reload_list(self):
+            for child in self.entries_box.get_children():
+                self.entries_box.remove(child)
+            self.entry_widgets = []
+            annotations = parse_annotation_list(load_annotation_list(directory))
+            if not annotations:
+                empty = Gtk.Label(label="No annotations yet.")
+                empty.set_margin_top(30)
+                empty.get_style_context().add_class("dim-label")
+                self.entries_box.pack_start(empty, False, False, 0)
+            for annotation in annotations:
+                frame = Gtk.Frame()
+                card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+                card.set_border_width(10)
+                frame.add(card)
+
+                metadata = Gtk.Label(
+                    label=f"{annotation.captured_at:%Y-%m-%d %H:%M}  ·  {annotation.source}"
+                )
+                metadata.set_halign(Gtk.Align.START)
+                metadata.set_selectable(False)
+                metadata.set_ellipsize(Pango.EllipsizeMode.END)
+                metadata.get_style_context().add_class("dim-label")
+                card.pack_start(metadata, False, False, 0)
+
+                quote_view = self._text_view(annotation.quote)
+                card.pack_start(self._scroll_for(quote_view, minimum_height=62), False, False, 0)
+                comment_view = self._text_view(annotation.comment)
+                card.pack_start(self._scroll_for(comment_view, minimum_height=62), False, False, 0)
+
+                self.entry_widgets.append((annotation, quote_view, comment_view))
+                self.entries_box.pack_start(frame, False, False, 0)
+            self.entries_box.show_all()
+
+        def _edited_annotations(self) -> list[Annotation]:
+            edited = []
+            for original, quote_view, comment_view in self.entry_widgets:
+                edited.append(
+                    update_annotation(
+                        original,
+                        quote=self._buffer_text(quote_view),
+                        comment=self._buffer_text(comment_view),
+                    )
+                )
+            return edited
+
+        def _save_edits(self, _button=None):
+            try:
+                annotations = self._edited_annotations()
+            except ValueError:
+                self.list_status.set_text("Quotes and comments cannot be empty.")
+                return
+            self.saved_path = save_edited_annotations(annotations, directory)
+            self.list_status.set_text("Edits saved.")
+
+        def _copy_all(self, _button=None):
+            try:
+                text = copyable_annotation_list(self._edited_annotations())
+            except ValueError:
+                self.list_status.set_text("Fix empty quotes or comments before copying.")
+                return
+            clipboard = Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD)
+            clipboard.set_text(text, -1)
+            clipboard.store()
+            self.list_status.set_text("Copied quotes and comments without timestamps.")
 
         def _on_key_press(self, _widget, event):
             if event.keyval == Gdk.KEY_Escape:
                 self.close()
                 return True
+            if event.state & Gdk.ModifierType.CONTROL_MASK:
+                if event.keyval in (Gdk.KEY_1, Gdk.KEY_2):
+                    index = 0 if event.keyval == Gdk.KEY_1 else 1
+                    if index < len(candidates):
+                        self.candidate_picker.set_active(index)
+                        self.notebook.set_current_page(0)
+                        self.comment_view.grab_focus()
+                    return True
+                if (
+                    self.notebook.get_current_page() == 1
+                    and event.state & Gdk.ModifierType.SHIFT_MASK
+                    and event.keyval in (Gdk.KEY_c, Gdk.KEY_C)
+                ):
+                    self._copy_all()
+                    return True
             if event.keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter):
                 if event.state & Gdk.ModifierType.CONTROL_MASK:
-                    self._save()
+                    if self.notebook.get_current_page() == 0:
+                        self._add_annotation()
+                    else:
+                        self._save_edits()
                     return True
             return False
 
@@ -152,11 +316,11 @@ def show_annotation_popup(*, quote: str, source: str, directory: Path) -> Path |
 
 def main() -> int:
     source = active_window_title()
-    quote = capture_selected_text()
-    if not quote:
+    candidates = capture_text_candidates()
+    if not candidates:
         _show_no_selection_message()
         return 1
 
     directory = Path(os.environ.get("ANNOTATIONS_DIR", "~/Annotations")).expanduser()
-    show_annotation_popup(quote=quote, source=source, directory=directory)
+    show_annotation_popup(candidates=candidates, source=source, directory=directory)
     return 0

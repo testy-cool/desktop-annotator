@@ -3,7 +3,13 @@ import unittest
 from datetime import datetime
 from pathlib import Path
 
-from desktop_annotator.workflow import save_comment
+from desktop_annotator.annotation import Annotation, load_annotation_list, parse_annotation_list
+from desktop_annotator.workflow import (
+    annotation_source,
+    save_comment,
+    save_edited_annotations,
+    update_annotation,
+)
 
 
 class SaveCommentTests(unittest.TestCase):
@@ -30,6 +36,42 @@ class SaveCommentTests(unittest.TestCase):
                     source="Firefox",
                     directory=Path(directory),
                 )
+
+
+class EditableListWorkflowTests(unittest.TestCase):
+    def test_clipboard_source_is_identified_without_changing_selection_source(self):
+        self.assertEqual(annotation_source("Selected text", "Firefox"), "Firefox")
+        self.assertEqual(annotation_source("Clipboard", "Firefox"), "Clipboard · Firefox")
+
+    def test_editing_preserves_noneditable_timestamp_and_source(self):
+        original = Annotation(
+            quote="Original quote",
+            comment="Original comment",
+            source="Firefox",
+            captured_at=datetime(2026, 8, 20, 18, 20),
+        )
+
+        edited = update_annotation(original, quote=" Edited quote ", comment=" Edited comment ")
+
+        self.assertEqual(edited.quote, "Edited quote")
+        self.assertEqual(edited.comment, "Edited comment")
+        self.assertEqual(edited.source, original.source)
+        self.assertEqual(edited.captured_at, original.captured_at)
+
+    def test_saves_all_edited_entries_back_to_the_continuous_file(self):
+        entry = Annotation(
+            quote="Edited quote",
+            comment="Edited comment",
+            source="Firefox",
+            captured_at=datetime(2026, 8, 20, 18, 20),
+        )
+        with tempfile.TemporaryDirectory() as directory_name:
+            directory = Path(directory_name)
+
+            path = save_edited_annotations([entry], directory)
+
+            self.assertEqual(path.name, "annotations.md")
+            self.assertEqual(parse_annotation_list(load_annotation_list(directory)), [entry])
 
 
 if __name__ == "__main__":
