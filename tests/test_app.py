@@ -5,6 +5,7 @@ from desktop_annotator.app import (
     _build_sublime_command,
     _close_after_successful_add,
     _insert_marked_text,
+    _install_toggle_close,
     _load_gtk,
     _move_popup_to_right_monitor,
     _show_list_page,
@@ -130,6 +131,33 @@ class PopupPlacementTests(unittest.TestCase):
 
         self.assertTrue(moved)
         self.assertEqual(window.position, (3160, 230))
+
+
+class PopupToggleTests(unittest.TestCase):
+    def test_toggle_request_schedules_the_existing_window_to_close(self):
+        class ToggleInstance:
+            callback = None
+
+            def set_toggle_callback(self, callback):
+                self.callback = callback
+
+        class Window:
+            def close(self):
+                pass
+
+        toggle_instance = ToggleInstance()
+        window = Window()
+        scheduled = []
+
+        close_already_requested = _install_toggle_close(
+            toggle_instance,
+            window,
+            idle_add=lambda callback: scheduled.append(callback),
+        )
+        toggle_instance.callback()
+
+        self.assertFalse(close_already_requested)
+        self.assertEqual(scheduled, [window.close])
 
 
 if __name__ == "__main__":

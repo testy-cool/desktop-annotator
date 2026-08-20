@@ -10,6 +10,8 @@ desktop, add comments, and keep them in one editable Markdown list.
    The popup is centered on the monitor immediately to the right of the monitor
    containing the mouse. If the mouse is already on the rightmost monitor, the
    popup stays on that monitor.
+   Press `Ctrl+Alt+A` again to close the open popup. The shortcut toggles the
+   single annotator instance instead of opening additional windows.
 3. Choose `Selected text` or `Clipboard` when both are available. `Ctrl+1`
    and `Ctrl+2` switch between them.
 4. Write a comment and press `Ctrl+Enter` to add it. The popup closes

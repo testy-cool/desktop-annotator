@@ -13,6 +13,7 @@ from desktop_annotator.annotation import (
 )
 from desktop_annotator.capture import TextCandidate, active_window_title, capture_text_candidates
 from desktop_annotator.positioning import MonitorRect, popup_position
+from desktop_annotator.toggle import ToggleInstance, run_as_toggle_instance
 from desktop_annotator.workflow import (
     annotation_source,
     save_comment,
@@ -118,10 +119,27 @@ def _move_popup_to_right_monitor(
     return True
 
 
+def _install_toggle_close(toggle_instance, window, *, idle_add) -> bool:
+    close_requested = False
+
+    def request_close() -> None:
+        nonlocal close_requested
+        close_requested = True
+        idle_add(window.close)
+
+    toggle_instance.set_toggle_callback(request_close)
+    return close_requested
+
+
 def show_annotation_popup(
-    *, candidates: list[TextCandidate], source: str, directory: Path
+    *,
+    candidates: list[TextCandidate],
+    source: str,
+    directory: Path,
+    toggle_instance: ToggleInstance | None = None,
 ) -> Path | None:
     Gdk, Gtk, Pango = _load_gtk()
+    from gi.repository import GLib
 
     class AnnotationWindow(Gtk.Window):
         def __init__(self):
@@ -420,6 +438,10 @@ def show_annotation_popup(
             return False
 
     window = AnnotationWindow()
+    if toggle_instance is not None and _install_toggle_close(
+        toggle_instance, window, idle_add=GLib.idle_add
+    ):
+        return None
     _move_popup_to_right_monitor(window, Gdk)
     window.show_all()
     window.comment_view.grab_focus()
@@ -428,7 +450,14 @@ def show_annotation_popup(
     return window.saved_path
 
 
-def main() -> int:
+def _toggle_lock_path() -> Path:
+    runtime_directory = os.environ.get("XDG_RUNTIME_DIR")
+    if runtime_directory:
+        return Path(runtime_directory) / "desktop-annotator.lock"
+    return Path("~/.cache/desktop-annotator/instance.lock").expanduser()
+
+
+def _run_application(toggle_instance: ToggleInstance) -> int:
     source = active_window_title()
     candidates = capture_text_candidates()
     if not candidates:
@@ -436,5 +465,14 @@ def main() -> int:
         return 1
 
     directory = Path(os.environ.get("ANNOTATIONS_DIR", "~/Annotations")).expanduser()
-    show_annotation_popup(candidates=candidates, source=source, directory=directory)
+    show_annotation_popup(
+        candidates=candidates,
+        source=source,
+        directory=directory,
+        toggle_instance=toggle_instance,
+    )
     return 0
+
+
+def main() -> int:
+    return run_as_toggle_instance(ToggleInstance(_toggle_lock_path()), _run_application)
