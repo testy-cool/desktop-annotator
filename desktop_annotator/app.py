@@ -570,15 +570,25 @@ def _toggle_lock_path() -> Path:
     return Path("~/.cache/desktop-annotator/instance.lock").expanduser()
 
 
+def _select_popup():
+    """The HTML interface unless someone asks for the old widget one."""
+    if os.environ.get("DESKTOP_ANNOTATOR_UI") == "gtk":
+        return show_annotation_popup
+    from desktop_annotator.webview import show_annotation_popup as show_html_popup
+
+    return show_html_popup
+
+
 def _run_application(toggle_instance: ToggleInstance) -> int:
     source = active_window_title()
     candidates = capture_text_candidates()
-    if not candidates:
+    popup = _select_popup()
+    if not candidates and popup is show_annotation_popup:
         _show_no_selection_message()
         return 1
 
     directory = Path(os.environ.get("ANNOTATIONS_DIR", "~/Annotations")).expanduser()
-    show_annotation_popup(
+    popup(
         candidates=candidates,
         source=source,
         directory=directory,

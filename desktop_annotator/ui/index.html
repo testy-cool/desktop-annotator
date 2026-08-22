@@ -1,0 +1,386 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Annotate</title>
+<style>
+  :root{
+    --card:#1c1c1c; --panel:#232323; --line:#303030; --line2:#3a3a3a;
+    --text:#e6e6e6; --dim:#8a8a8a; --faint:#6a6a6a;
+    --accent:#7aa2f7; --danger:#d08a70; --ok:#7ab88a;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--card);color:var(--text);overflow:hidden;
+       font:14px/1.5 "Inter","Segoe UI",system-ui,sans-serif}
+  .win{height:100%;display:flex;flex-direction:column;border:1px solid var(--line2)}
+  .bar{display:flex;align-items:center;gap:8px;padding:0 4px 0 12px;height:34px;flex:none;
+       background:#1a1a1a;border-bottom:1px solid var(--line);user-select:none}
+  .bar .t{font-size:12px;color:var(--dim);flex:1;white-space:nowrap;overflow:hidden;
+          text-overflow:ellipsis;cursor:move}
+  .btn{width:30px;height:26px;display:grid;place-items:center;border:0;background:transparent;
+       color:var(--dim);font-size:15px;cursor:pointer;border-radius:2px;font-family:inherit}
+  .btn:hover{background:#2c2c2c;color:var(--text)}
+  .btn.x:hover{background:#a33;color:#fff}
+  .tabs{display:flex;border-bottom:1px solid var(--line);background:#191919;flex:none}
+  .tab{padding:8px 16px;font-size:12px;color:var(--faint);cursor:pointer;font-family:inherit;
+       border:0;background:transparent;border-bottom:2px solid transparent}
+  .tab:hover{color:var(--text)}
+  .tab.on{color:var(--text);border-bottom-color:var(--accent);background:var(--card)}
+  .tab .k{color:var(--faint);font-size:10px;margin-left:6px}
+  .pane{flex:1;min-height:0;padding:14px;display:none;flex-direction:column;gap:10px}
+  .pane.on{display:flex}
+  .meta{display:flex;gap:10px;align-items:baseline;font-size:12px;color:var(--dim)}
+  .meta .src{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .meta .stamp{margin-left:auto;color:var(--faint);font-size:11px;white-space:nowrap}
+  .pick{display:flex;gap:6px;align-items:center;flex:none}
+  .chip{font-size:11px;padding:3px 10px;border:1px solid var(--line);background:transparent;
+        color:var(--faint);cursor:pointer;font-family:inherit}
+  .chip.on{background:#303030;border-color:#5a5a5a;color:var(--text)}
+  .count{font-size:11px;color:var(--faint);white-space:nowrap}
+  textarea,input{font-family:inherit;color:var(--text);background:var(--panel);
+                 border:1px solid var(--line);outline:none}
+  textarea{padding:10px 12px;font-size:13px;line-height:1.5;resize:none}
+  textarea:focus,input:focus{border-color:var(--accent)}
+  #quote{flex:1 1 auto;min-height:96px;max-height:42%;color:#cfcfcf}
+  #comment{flex:1 1 auto;min-height:88px;border-color:var(--accent)}
+  .foot{display:flex;align-items:center;gap:8px;flex:none}
+  .status{font-size:11px;color:var(--danger);flex:1;overflow:hidden;text-overflow:ellipsis;
+          white-space:nowrap}
+  .status.ok{color:var(--ok)}
+  .hint{font-size:11px;color:#5a5a5a;white-space:nowrap}
+  .go{font-size:12px;padding:6px 14px;border:1px solid var(--line2);background:#2a2a2a;
+      color:var(--text);cursor:pointer;font-family:inherit;white-space:nowrap}
+  .go:hover{background:#343434}
+  .go.primary{background:#2f4a7a;border-color:#3d5f96}
+  .go.primary:hover{background:#37568c}
+  .go.ghost{background:transparent;color:var(--dim);border-color:transparent}
+  .go.ghost:hover{background:#252525;color:var(--text)}
+  .search{display:flex;gap:8px;align-items:center;flex:none}
+  .search input{flex:1;padding:6px 10px;font-size:12px}
+  .listwrap{border:1px solid var(--line);background:var(--panel);flex:1;min-height:80px;
+            overflow:auto}
+  .row{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;
+       border-bottom:1px solid #1b1b1b;position:relative}
+  .row:nth-child(odd){background:#202020}
+  .row:nth-child(even){background:#262626}
+  .row.sel{background:#243044;box-shadow:inset 2px 0 0 var(--accent)}
+  .row:hover .rowbtns{opacity:1}
+  .rowbtns{position:absolute;top:6px;right:8px;display:flex;gap:2px;opacity:0;
+           transition:opacity .12s}
+  .rowbtns .btn{width:24px;height:22px;font-size:12px}
+  .cx{margin:2px 0 0;accent-color:var(--accent);width:15px;height:15px;flex:none;cursor:pointer}
+  .rbody{flex:1;min-width:0}
+  .rhead{font-size:10px;color:var(--faint);margin-bottom:5px;padding-right:60px}
+  .rq,.rc{font-size:13px;white-space:pre-wrap;word-wrap:break-word;outline:none;
+          border:1px solid transparent;padding:1px 3px;margin:0 -3px}
+  .rq{color:#cfcfcf;max-height:5.4em;overflow:hidden}
+  .rc{color:var(--text);margin-top:2px;max-height:4.2em;overflow:hidden}
+  .row.clamped .rq{-webkit-mask-image:linear-gradient(#000 55%,transparent)}
+  .row.open .rq,.row.open .rc{max-height:none;-webkit-mask-image:none}
+  .more{display:none;margin-top:4px;font-size:11px;color:var(--faint);background:none;
+        border:0;padding:0;cursor:pointer;font-family:inherit}
+  .more:hover{color:var(--accent)}
+  .row.clamped .more{display:block}
+  .row.open .more{display:block}
+  .rq:focus,.rc:focus{border-color:var(--line2);background:#1b1b1b}
+  .empty{padding:22px 14px;color:var(--faint);font-size:12px}
+  mark{background:#3a3a1a;color:#e8e0a0;padding:0 2px}
+  .tray{display:flex;flex-direction:column;gap:6px;flex:none}
+  .trayhead{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--dim)}
+  .sep{color:var(--faint)}
+  .selbtns{display:flex;gap:6px;margin-left:auto}
+  .mini{font-size:11px;padding:3px 9px;border:1px solid var(--line);background:transparent;
+        color:var(--dim);cursor:pointer;font-family:inherit}
+  .mini:hover{background:#2a2a2a;color:var(--text)}
+  #out{width:100%;height:110px;background:#1a1a1a;color:#d8d8d8;white-space:pre-wrap;
+       word-break:break-word;
+       font:12px/1.55 ui-monospace,"JetBrains Mono",Menlo,monospace;overflow:auto}
+  .grip{position:fixed;right:0;bottom:0;width:16px;height:16px;cursor:nwse-resize;z-index:5;
+        background:repeating-linear-gradient(135deg,transparent,transparent 2px,#4a4a4a 2px,#4a4a4a 3px)}
+</style>
+
+<div class="win">
+  <div class="bar">
+    <span class="t" id="title">Annotate</span>
+    <button class="btn" id="sublime" title="Open annotations.md in Sublime">&#8599;</button>
+    <button class="btn" id="minimise" title="Minimise">&#8211;</button>
+    <button class="btn x" id="close" title="Close (Esc)">&#10005;</button>
+  </div>
+
+  <div class="tabs">
+    <button class="tab on" data-pane="add">Add<span class="k">Ctrl+1</span></button>
+    <button class="tab" data-pane="list">List<span class="k">Ctrl+L</span></button>
+  </div>
+
+  <div class="pane on" id="pane-add">
+    <div class="meta">
+      <span class="src" id="source"></span>
+      <span class="stamp" id="stamp"></span>
+    </div>
+    <div class="pick">
+      <span id="chips" style="display:flex;gap:6px"></span>
+      <span class="count" style="margin-left:auto" id="chars"></span>
+    </div>
+    <textarea id="quote" spellcheck="false"></textarea>
+    <textarea id="comment" placeholder="comment"></textarea>
+    <div class="foot">
+      <span class="status" id="addstatus"></span>
+      <span class="hint">Ctrl+Enter</span>
+      <button class="go ghost" id="cancel">Cancel</button>
+      <button class="go primary" id="add">Add annotation</button>
+    </div>
+  </div>
+
+  <div class="pane" id="pane-list">
+    <div class="search">
+      <input id="filter" placeholder="Filter annotations&#8230;  Ctrl+F" spellcheck="false">
+      <span class="count" id="shown"></span>
+      <button class="go ghost" id="copyall">Copy all</button>
+    </div>
+    <div class="listwrap" id="list"></div>
+    <div class="tray">
+      <div class="trayhead">
+        <span id="trayn">0 selected</span>
+        <span class="sep">&#183; joined by ---</span>
+        <span class="selbtns">
+          <button class="mini" id="all">Select all</button>
+          <button class="mini" id="none">Clear</button>
+          <button class="mini" id="copysel">Copy selection</button>
+        </span>
+      </div>
+      <textarea id="out" readonly spellcheck="false"></textarea>
+    </div>
+    <div class="foot">
+      <span class="status" id="liststatus"></span>
+      <span class="hint">Ctrl+Enter</span>
+      <button class="go ghost" id="revert">Revert</button>
+      <button class="go primary" id="save">Save edits</button>
+    </div>
+  </div>
+</div>
+<div class="grip" id="grip" title="Resize"></div>
+
+<script>
+const S = window.__STATE__ || {source:"", stamp:"", candidates:[], entries:[]};
+const host = m => window.webkit.messageHandlers.host.postMessage(JSON.stringify(m));
+const $ = id => document.getElementById(id);
+const esc = s => s.replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+
+/* ---------- window chrome ---------- */
+$("close").onclick = () => host({action:"close"});
+$("minimise").onclick = () => host({action:"minimise"});
+$("sublime").onclick = () => host({action:"sublime"});
+$("title").addEventListener("mousedown", e => { if (e.button === 0) host({action:"drag"}); });
+$("grip").addEventListener("mousedown", e => { e.preventDefault(); host({action:"resize"}); });
+
+/* ---------- tabs ---------- */
+const showPane = name => {
+  document.querySelectorAll(".tab").forEach(t => t.classList.toggle("on", t.dataset.pane === name));
+  document.querySelectorAll(".pane").forEach(p => p.classList.toggle("on", p.id === "pane-" + name));
+  if (name === "add") { $("comment").focus(); return; }
+  $("filter").focus();
+  clampRows();  // rows measure zero while the pane is hidden
+};
+document.querySelectorAll(".tab").forEach(t => t.onclick = () => showPane(t.dataset.pane));
+
+/* ---------- add pane ---------- */
+$("source").textContent = S.source;
+$("stamp").textContent = S.stamp;
+const countChars = () => $("chars").textContent = $("quote").value.length + " chars";
+$("quote").addEventListener("input", countChars);
+
+S.candidates.forEach((c, i) => {
+  const b = document.createElement("button");
+  b.className = "chip" + (i === 0 ? " on" : "");
+  b.textContent = c.label;
+  b.onclick = () => pickCandidate(i);
+  $("chips").appendChild(b);
+});
+let candidate = 0;
+function pickCandidate(i) {
+  if (!S.candidates[i]) return;
+  candidate = i;
+  [...$("chips").children].forEach((b, n) => b.classList.toggle("on", n === i));
+  $("quote").value = S.candidates[i].text;
+  countChars();
+}
+if (S.candidates.length) pickCandidate(0);
+
+const addAnnotation = () => {
+  const quote = $("quote").value.trim(), comment = $("comment").value.trim();
+  if (!quote) return setStatus("addstatus", "The quote cannot be empty.", false);
+  if (!comment) { setStatus("addstatus", "Write a comment before adding this entry.", false);
+                  return $("comment").focus(); }
+  host({action:"add", quote, comment, label:(S.candidates[candidate]||{}).label || ""});
+};
+$("add").onclick = addAnnotation;
+$("cancel").onclick = () => host({action:"close"});
+
+function setStatus(id, text, ok) {
+  const el = $(id);
+  el.textContent = text;
+  el.classList.toggle("ok", !!ok);
+}
+
+/* ---------- list pane ---------- */
+let entries = S.entries.map((e, i) => ({...e, id:i, on:false}));
+let dirty = false;
+
+const bodyText = e => e.quote + "\n\n→ " + e.comment;
+
+function markDirty() {
+  dirty = true;
+  setStatus("liststatus", "Unsaved edits.", false);
+}
+
+function renderList() {
+  const q = $("filter").value.trim().toLowerCase();
+  const list = $("list");
+  const visible = entries.filter(e =>
+    !q || e.quote.toLowerCase().includes(q) || e.comment.toLowerCase().includes(q)
+         || e.source.toLowerCase().includes(q));
+  $("shown").textContent = q ? visible.length + " of " + entries.length
+                             : entries.length + (entries.length === 1 ? " entry" : " entries");
+  $("title").textContent = "Annotate — " + entries.length +
+                           (entries.length === 1 ? " annotation" : " annotations");
+  if (!visible.length) {
+    list.innerHTML = '<div class="empty">' +
+      (entries.length ? "Nothing matches that filter." : "No annotations yet. Add one from the Add tab.") +
+      "</div>";
+    return;
+  }
+  const hi = s => q ? esc(s).replace(new RegExp("(" + q.replace(/[.*+?^${}()|[\]\\]/g,"\\$&") + ")","gi"),
+                                     "<mark>$1</mark>") : esc(s);
+  list.innerHTML = visible.map(e => `
+    <div class="row${e.on ? " sel" : ""}" data-id="${e.id}">
+      <input type="checkbox" class="cx"${e.on ? " checked" : ""}>
+      <div class="rbody">
+        <div class="rowbtns">
+          <button class="btn" data-act="copy" title="Copy just this">&#9099;</button>
+          <button class="btn x" data-act="del" title="Remove">&#10005;</button>
+        </div>
+        <div class="rhead">${esc(e.stamp)} · ${esc(e.source)}</div>
+        <div class="rq" contenteditable spellcheck="false">${hi(e.quote)}</div>
+        <div class="rc" contenteditable>→ ${hi(e.comment)}</div>
+        <button class="more" data-act="more">show all</button>
+      </div>
+    </div>`).join("");
+  clampRows();
+  renderTray();
+}
+
+function clampRows() {
+  $("list").querySelectorAll(".row").forEach(row => {
+    const over = [...row.querySelectorAll(".rq, .rc")]
+      .some(cell => cell.scrollHeight > cell.clientHeight + 2);
+    row.classList.toggle("clamped", over && !row.classList.contains("open"));
+  });
+}
+
+function openRow(row, open) {
+  row.classList.toggle("open", open);
+  row.classList.toggle("clamped", !open);
+  const button = row.querySelector(".more");
+  if (button) button.textContent = open ? "show less" : "show all";
+  if (!open) clampRows();
+}
+
+$("list").addEventListener("focusin", e => {
+  const row = e.target.closest(".row");
+  if (row && e.target.matches(".rq, .rc")) openRow(row, true);
+});
+
+function byId(id) { return entries.find(e => e.id === id); }
+
+$("list").addEventListener("change", e => {
+  if (!e.target.classList.contains("cx")) return;
+  const row = e.target.closest(".row");
+  byId(+row.dataset.id).on = e.target.checked;
+  row.classList.toggle("sel", e.target.checked);
+  renderTray();
+});
+
+$("list").addEventListener("click", e => {
+  const b = e.target.closest("[data-act]");
+  if (!b) return;
+  const row = b.closest(".row");
+  const entry = byId(+row.dataset.id);
+  if (b.dataset.act === "more") {
+    openRow(row, !row.classList.contains("open"));
+    return;
+  }
+  if (b.dataset.act === "copy") {
+    host({action:"copy", text:bodyText(entry)});
+    setStatus("liststatus", "Copied that entry.", true);
+  } else if (b.dataset.act === "del") {
+    entries = entries.filter(x => x !== entry);
+    renderList();
+    markDirty();
+    setStatus("liststatus", "1 entry removed. Save edits to apply, or Revert.", false);
+  }
+});
+
+$("list").addEventListener("input", e => {
+  const cell = e.target.closest(".rq, .rc");
+  if (!cell) return;
+  const entry = byId(+cell.closest(".row").dataset.id);
+  const text = cell.innerText.replace(/\n$/, "");
+  if (cell.classList.contains("rq")) entry.quote = text;
+  else entry.comment = text.replace(/^→\s*/, "");
+  markDirty();
+  renderTray();
+});
+
+function renderTray() {
+  const on = entries.filter(e => e.on);
+  $("trayn").textContent = on.length + " selected";
+  $("out").value = on.map(bodyText).join("\n\n---\n\n");
+}
+
+$("filter").addEventListener("input", renderList);
+$("all").onclick = () => { entries.forEach(e => e.on = true); renderList(); };
+$("none").onclick = () => { entries.forEach(e => e.on = false); renderList(); };
+$("copysel").onclick = () => {
+  if (!$("out").value) return setStatus("liststatus", "Tick some entries first.", false);
+  host({action:"copy", text:$("out").value});
+  setStatus("liststatus", entries.filter(e => e.on).length + " entries copied.", true);
+};
+$("copyall").onclick = () => {
+  if (!entries.length) return;
+  host({action:"copy", text:entries.map(bodyText).join("\n\n---\n\n")});
+  setStatus("liststatus", "All " + entries.length + " entries copied.", true);
+};
+$("save").onclick = () => host({action:"save",
+  entries:entries.map(e => ({stamp:e.stamp, source:e.source, quote:e.quote, comment:e.comment}))});
+$("revert").onclick = () => host({action:"revert"});
+
+/* ---------- messages from the host ---------- */
+window.fromHost = msg => {
+  if (msg.kind === "entries") {
+    entries = msg.entries.map((e, i) => ({...e, id:i, on:false}));
+    dirty = false;
+    renderList();
+    if (msg.status) setStatus("liststatus", msg.status, true);
+  } else if (msg.kind === "error") {
+    setStatus(msg.pane === "add" ? "addstatus" : "liststatus", msg.status, false);
+  } else if (msg.kind === "status") {
+    setStatus(msg.pane === "add" ? "addstatus" : "liststatus", msg.status, !!msg.ok);
+  }
+};
+
+/* ---------- keys ---------- */
+const listOpen = () => $("pane-list").classList.contains("on");
+addEventListener("resize", clampRows);
+addEventListener("keydown", e => {
+  if (e.key === "Escape") { host({action:"close"}); return; }
+  if (!e.ctrlKey) return;
+  const k = e.key.toLowerCase();
+  if (k === "enter") { e.preventDefault(); listOpen() ? $("save").click() : addAnnotation(); }
+  else if (k === "1") { e.preventDefault(); showPane("add"); }
+  else if (k === "2" || k === "l") { e.preventDefault(); showPane("list"); }
+  else if (k === "f") { e.preventDefault(); showPane("list"); $("filter").select(); }
+  else if (k === "c" && e.shiftKey) { e.preventDefault(); showPane("list"); $("copysel").click(); }
+});
+
+renderList();
+showPane(S.entries.length && !S.candidates.length ? "list" : "add");
+</script>
