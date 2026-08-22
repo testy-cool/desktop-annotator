@@ -8,6 +8,11 @@ from types import FrameType
 from typing import Callable
 
 
+# SIGUSR1 looks like the obvious choice, but WebKit's JavaScript engine claims
+# it for garbage collection and replaces any handler the process already had,
+# which kills the window instead of toggling it.
+TOGGLE_SIGNAL = signal.SIGUSR2
+
 ToggleCallback = Callable[[], None]
 SignalSender = Callable[[int, int], None]
 
@@ -40,7 +45,7 @@ class ToggleInstance:
             existing_pid = lock_file.read().strip()
             lock_file.close()
             if existing_pid:
-                self.signal_sender(int(existing_pid), signal.SIGUSR1)
+                self.signal_sender(int(existing_pid), TOGGLE_SIGNAL)
             return False
 
         lock_file.seek(0)
@@ -49,8 +54,8 @@ class ToggleInstance:
         lock_file.flush()
         os.fchmod(lock_file.fileno(), 0o600)
         self._lock_file = lock_file
-        self._previous_signal_handler = signal.getsignal(signal.SIGUSR1)
-        signal.signal(signal.SIGUSR1, self._receive_toggle)
+        self._previous_signal_handler = signal.getsignal(TOGGLE_SIGNAL)
+        signal.signal(TOGGLE_SIGNAL, self._receive_toggle)
         return True
 
     def set_toggle_callback(self, callback: ToggleCallback) -> None:
@@ -71,7 +76,7 @@ class ToggleInstance:
         if self._lock_file is None:
             return
         if self._previous_signal_handler is not None:
-            signal.signal(signal.SIGUSR1, self._previous_signal_handler)
+            signal.signal(TOGGLE_SIGNAL, self._previous_signal_handler)
         fcntl.flock(self._lock_file, fcntl.LOCK_UN)
         self._lock_file.close()
         self._lock_file = None

@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from desktop_annotator.toggle import ToggleInstance, run_as_toggle_instance
+from desktop_annotator.toggle import TOGGLE_SIGNAL, ToggleInstance, run_as_toggle_instance
 
 
 class ToggleInstanceTests(unittest.TestCase):
@@ -23,7 +23,7 @@ class ToggleInstanceTests(unittest.TestCase):
             self.assertTrue(first.claim_or_toggle())
             self.assertFalse(second.claim_or_toggle())
 
-            self.assertEqual(sent_signals, [(os.getpid(), signal.SIGUSR1)])
+            self.assertEqual(sent_signals, [(os.getpid(), TOGGLE_SIGNAL)])
 
     def test_toggle_signal_runs_the_registered_callback(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -33,7 +33,7 @@ class ToggleInstanceTests(unittest.TestCase):
 
             self.assertTrue(instance.claim_or_toggle())
             instance.set_toggle_callback(lambda: toggled.append(True))
-            signal.raise_signal(signal.SIGUSR1)
+            signal.raise_signal(TOGGLE_SIGNAL)
 
             self.assertEqual(toggled, [True])
 
@@ -64,7 +64,7 @@ class ToggleInstanceTests(unittest.TestCase):
             toggled = []
 
             self.assertTrue(instance.claim_or_toggle())
-            signal.raise_signal(signal.SIGUSR1)
+            signal.raise_signal(TOGGLE_SIGNAL)
             instance.set_toggle_callback(lambda: toggled.append(True))
 
             self.assertEqual(toggled, [True])
