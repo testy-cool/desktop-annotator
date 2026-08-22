@@ -7,6 +7,12 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 
+# The marker written to the clipboard while asking an application to copy. The
+# restore afterwards can lose a race with X selection ownership, so a marker
+# occasionally outlives the run that wrote it and must never be offered back as
+# if the user had copied it.
+SENTINEL_PREFIX = "desktop-annotator-"
+
 COPY_RESPONSE_TIMEOUT = 0.18
 COPY_POLL_INTERVAL = 0.008
 
@@ -100,7 +106,7 @@ def copy_focused_selection(
     key_sender = key_sender or _send_copy_keystroke
 
     previous = clipboard_reader()
-    sentinel = f"desktop-annotator-{uuid.uuid4()}"
+    sentinel = f"{SENTINEL_PREFIX}{uuid.uuid4()}"
     if not clipboard_writer(sentinel):
         return ""
 
@@ -132,6 +138,10 @@ def capture_selected_text(
     return clipboard_copy().strip()
 
 
+def _without_own_marker(text: str) -> str:
+    return "" if text.startswith(SENTINEL_PREFIX) else text
+
+
 def capture_text_candidates(
     primary_reader: Callable[[], str] | None = None,
     clipboard_reader: Callable[[], str] | None = None,
@@ -141,10 +151,10 @@ def capture_text_candidates(
     clipboard_reader = clipboard_reader or read_clipboard_selection
     clipboard_copy = clipboard_copy or copy_focused_selection
 
-    clipboard = clipboard_reader().strip()
-    selection = primary_reader().strip()
+    clipboard = _without_own_marker(clipboard_reader().strip())
+    selection = _without_own_marker(primary_reader().strip())
     if not selection:
-        selection = clipboard_copy().strip()
+        selection = _without_own_marker(clipboard_copy().strip())
 
     candidates = []
     if selection:

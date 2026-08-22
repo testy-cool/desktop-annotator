@@ -2,6 +2,7 @@ import unittest
 
 from desktop_annotator.capture import (
     COPY_RESPONSE_TIMEOUT,
+    SENTINEL_PREFIX,
     capture_selected_text,
     capture_text_candidates,
     copy_focused_selection,
@@ -85,6 +86,40 @@ class CaptureTextCandidatesTests(unittest.TestCase):
         )
 
         self.assertEqual([(item.label, item.text) for item in candidates], [("Clipboard", "live clipboard")])
+
+
+class OwnMarkerTests(unittest.TestCase):
+    """A leftover marker is ours, not something the user copied."""
+
+    def test_never_offers_a_leftover_marker_as_the_clipboard(self):
+        candidates = capture_text_candidates(
+            primary_reader=lambda: "selected in Firefox",
+            clipboard_reader=lambda: f"{SENTINEL_PREFIX}c60d4ded",
+            clipboard_copy=lambda: self.fail("fallback copy should not run"),
+        )
+
+        self.assertEqual([item.label for item in candidates], ["Selected text"])
+
+    def test_a_marker_left_in_the_selection_falls_back_to_copying(self):
+        candidates = capture_text_candidates(
+            primary_reader=lambda: f"{SENTINEL_PREFIX}c60d4ded",
+            clipboard_reader=lambda: "",
+            clipboard_copy=lambda: "copied selection",
+        )
+
+        self.assertEqual(
+            [(item.label, item.text) for item in candidates],
+            [("Selected text", "copied selection")],
+        )
+
+    def test_offers_nothing_when_only_a_marker_survives(self):
+        candidates = capture_text_candidates(
+            primary_reader=lambda: "",
+            clipboard_reader=lambda: f"{SENTINEL_PREFIX}c60d4ded",
+            clipboard_copy=lambda: f"{SENTINEL_PREFIX}c60d4ded",
+        )
+
+        self.assertEqual(candidates, [])
 
 
 class FakeDesktop:
