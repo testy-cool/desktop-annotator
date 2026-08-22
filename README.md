@@ -1,85 +1,122 @@
 # Desktop Annotator
 
-Capture selected or copied text from any application on a Linux Mint X11
-desktop, add comments, and keep them in one editable Markdown list.
+Grab text from any window on a Linux desktop, write a note next to it, and keep
+every note in one plain Markdown file.
 
-## Use
+It was built for reading what an AI coding agent just said and answering it in
+writing, but it does not know or care where the text came from. A browser, a
+PDF, a terminal, an editor, a chat window. Anything you can select works.
 
-1. Select or copy text in a browser, editor, PDF viewer, terminal, or another app.
-2. Press `Ctrl+Alt+A`.
-   The popup is centered on the monitor immediately to the right of the monitor
-   containing the mouse. If the mouse is already on the rightmost monitor, the
-   popup stays on that monitor.
-   Press `Ctrl+Alt+A` again to close the open popup. The shortcut toggles the
-   single annotator instance instead of opening additional windows.
-3. Choose `Selected text` or `Clipboard` when both are available. `Ctrl+1`
-   and `Ctrl+2` switch between them.
-4. Write a comment and press `Ctrl+Enter` to add it. The popup closes
-   immediately after saving.
-5. To review the accumulated annotations later, open the tool again and choose
-   the List tab or press `Ctrl+L`. Edit any quote or comment, then press
-   `Ctrl+Enter` or `Save edits`.
+![Capturing a reply and writing a note beside it](docs/capture.png)
 
-Annotations are appended to `~/Annotations/annotations.md`:
+Select the text, press the shortcut, type the note, press `Ctrl+Enter`. The
+window closes and the note is on disk.
+
+## The file
+
+Notes are appended to `~/Annotations/annotations.md`:
 
 ```markdown
-## 2026-08-20 16:42 · Firefox — Agent response
+## 2026-08-22 12:05 · Terminal — cargo build
 
-> The selected text appears here.
+> warning: unused variable: `attempt`
+>    --> src/main.rs:96:13
 
-→ The comment appears here.
+→ Left over from the focus logging. xdotool windowactivate exits 0 even when it
+silently fails, so the only trustworthy signal is whether getwindowfocus
+actually reports our window.
 ```
 
-The annotation directory and files are created with private user-only
-permissions. Set `ANNOTATIONS_DIR` to use a different directory.
+That is the whole storage format. There is no database and no sync. The
+directory and the file are created readable by you only. Set `ANNOTATIONS_DIR`
+to keep them somewhere else.
 
-In the List tab, timestamps and source-window names are dim, display-only
-labels embedded between entries. They cannot be selected or edited. All quotes
-and comments live in one continuous editable text area. Entries have subtle
-zebra-striping and two empty lines between them, and opening the List tab scrolls
-directly to the newest entry at the bottom. Long lines wrap at word boundaries
-instead of scrolling horizontally. `Copy all` copies only that text, without
-timestamps or source metadata. `Open in Sublime` (or `Ctrl+O`) saves current
-edits, opens `annotations.md` with the installed `subl` command, and closes the
-popup.
+## The list
 
-On first use, existing daily files such as `2026-08-20.md` are copied into the
-continuous list. The original daily files remain untouched as backups.
+The second tab is every note you have taken, newest first. It is one document
+rather than a table of rows, so you can drag a selection across the end of one
+note and the start of the next and copy exactly that. Filter with `Ctrl+F`,
+copy the selection with `Ctrl+C`, edit any note in place and press `Save edits`
+to write the file back.
 
-## How capture works
+![The list of saved notes](docs/list.png)
 
-On X11, selecting text usually publishes it to the `PRIMARY` selection. The
-tool reads both that selection and the live `CLIPBOARD` only when launched. If
-PRIMARY is empty, it briefly uses `Ctrl+C` to cover applications that do not
-publish PRIMARY, then restores the clipboard's previous contents. It does not
-run continuously or monitor typing.
+## Run it
+
+```bash
+git clone https://github.com/testy-cool/desktop-annotator
+cd desktop-annotator
+/usr/bin/python3 annotate.py
+```
+
+It has to be the system Python, because that is the interpreter with the GTK
+bindings installed. There is nothing to build and nothing to install.
+
+To get the shortcut, link the launcher somewhere on your path and bind it in
+your desktop's keyboard settings. On Cinnamon that is Keyboard, Shortcuts,
+Custom Shortcuts:
+
+```bash
+ln -s "$PWD/annotate.py" ~/.local/bin/desktop-annotator
+```
+
+Pressing the shortcut again closes an open window instead of opening a second
+one. If two monitors are connected the window opens on the one to the right of
+your mouse, so it does not cover what you are reading.
+
+## Shortcuts
+
+| Key | Does |
+| --- | --- |
+| `Ctrl+Enter` | Save the note, or save your edits in the list |
+| `Ctrl+1` | Add tab |
+| `Ctrl+2` or `Ctrl+L` | List tab |
+| `Ctrl+F` | Filter the list |
+| `Ctrl+A` | Select every note in the list |
+| `Esc` | Close |
+
+The arrow button in the title bar opens `annotations.md` in Sublime Text, if you
+have the `subl` command.
 
 ## Requirements
 
-- Python 3 with PyGObject and GTK 3
-- `xclip`
-- `xdotool`
-- `zenity` for the no-selection warning
+- Linux running X11. Wayland is not supported.
+- Python 3 with PyGObject, GTK 3 and WebKit2GTK 4.1.
+- `xclip` and `xdotool`. Also `zenity`, but only for the older GTK window.
 
-The launcher must use the system Python (`/usr/bin/python3`) on this Mint host,
-because that interpreter has the GTK bindings installed.
+Tested on Linux Mint with Cinnamon. Other X11 desktops should work, since the
+only desktop specific part is the keyboard shortcut you bind yourself.
 
-## Current local installation
+## How the text gets captured
 
-The executable is linked at `~/.local/bin/desktop-annotator`, and Cinnamon
-custom shortcut `custom12` binds it to `Ctrl+Alt+A`.
+Selecting text on X11 usually publishes it to the `PRIMARY` selection. The tool
+reads `PRIMARY` and the clipboard once, when you launch it. If `PRIMARY` is
+empty, which happens with applications that do not publish it, it sends a brief
+`Ctrl+C` and then puts your old clipboard contents back. It does not run in the
+background and it does not watch your typing.
 
-To run it directly:
+## State of it
 
-```bash
-/home/testycool/.local/bin/desktop-annotator
-```
+Rough on purpose. It was written in a few sittings to solve one problem, and it
+is small enough to read in an afternoon.
 
-To remove the local integration, delete the launcher link and remove
-`custom12` in Cinnamon's Keyboard settings under Custom Shortcuts.
+The interface is one HTML file loaded into a WebKit window, so changing how it
+looks means editing `desktop_annotator/ui/index.html` and pressing the shortcut
+again. That costs about 230ms of startup. Set `DESKTOP_ANNOTATOR_UI=gtk` for the
+older plain GTK window, which opens in roughly half the time and has fewer
+features.
+
+`rust/` is an abandoned experiment at rebuilding the same thing in Rust and
+Slint. It starts slower and uses more memory than the Python version once it
+parses a real annotation file, which was the end of that idea. It is kept
+because the notes in `rust/README.md` are worth more than the code.
 
 ## Tests
 
 ```bash
 /usr/bin/python3 -m unittest discover -v
 ```
+
+## Licence
+
+MIT.
