@@ -53,71 +53,29 @@
   .go.primary:hover{background:#37568c}
   .go.ghost{background:transparent;color:var(--dim)}
   .go.ghost:hover{background:#252525;color:var(--text)}
-  /* list */
-  .listwrap{border:1px solid var(--line);background:var(--panel);height:300px;overflow:auto}
+  /* list, as one continuous document */
+  .doc{border:1px solid var(--line);background:var(--panel);height:300px;overflow:auto;
+       font-size:13px}
+  .entry{padding:10px 14px 12px}
+  .entry.a{background:#202020}
+  .entry.b{background:#262626}
+  .blame{font-size:10px;color:var(--faint);margin-bottom:5px;user-select:none;
+         white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .q{color:#cfcfcf;white-space:pre-wrap}
+  .c{color:var(--text);white-space:pre-wrap;margin-top:2px}
+  .docsep{color:var(--faint);padding:0 14px;line-height:2.1;background:#1d1d1d}
   .search{display:flex;gap:8px;align-items:center}
   .search input{flex:1;background:var(--panel);border:1px solid var(--line);color:var(--text);
                 padding:6px 10px;font-size:12px;outline:none}
   .search input:focus{border-color:var(--accent)}
   .count{font-size:11px;color:var(--faint);white-space:nowrap}
-  .row{padding:10px 12px;border-bottom:1px solid #1b1b1b;position:relative}
-  .row:nth-child(odd){background:#202020}
-  .row:nth-child(even){background:#262626}
-  .row:hover .rowbtns{opacity:1}
-  .rowbtns{position:absolute;top:6px;right:8px;display:flex;gap:2px;opacity:0;transition:opacity .12s}
-  .rowbtns .btn{width:24px;height:22px;font-size:12px}
-  .rhead{font-size:10px;color:var(--faint);margin-bottom:5px;padding-right:60px}
-  .rq{font-size:13px;color:#cfcfcf;white-space:pre-wrap}
-  .rc{font-size:13px;color:var(--text);white-space:pre-wrap;margin-top:2px}
   .grip{position:absolute;right:0;bottom:0;width:14px;height:14px;cursor:nwse-resize;
         background:repeating-linear-gradient(135deg,transparent,transparent 2px,#4a4a4a 2px,#4a4a4a 3px)}
   .cb{display:flex;gap:14px;flex-wrap:wrap;margin:10px 0 0}
   .cb div{font-size:12px;color:var(--dim)}
   .cb b{color:var(--accent);font-weight:500}
   mark{background:#3a3a1a;color:#e8e0a0;padding:0 2px}
-  .row{display:flex;gap:10px;align-items:flex-start}
-  .row.sel{background:#243044 !important;box-shadow:inset 2px 0 0 var(--accent)}
-  .cx{margin:2px 0 0;accent-color:var(--accent);width:15px;height:15px;flex:none;cursor:pointer}
-  .rbody{flex:1;min-width:0}
-  .tray{display:flex;flex-direction:column;gap:6px}
-  .trayhead{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--dim)}
-  textarea.out{width:100%;height:132px;background:#1a1a1a;border:1px solid var(--line);
-    color:#d8d8d8;font:12px/1.55 ui-monospace,"JetBrains Mono",Menlo,monospace;
-    padding:10px;resize:vertical;outline:none;white-space:pre}
-  textarea.out:focus{border-color:var(--accent)}
-  .sep{color:var(--faint)}
-  .selbtns{display:flex;gap:6px;margin-left:auto}
-  .mini{font-size:11px;padding:3px 9px;border:1px solid var(--line);background:transparent;
-    color:var(--dim);cursor:pointer}
-  .mini:hover{background:#2a2a2a;color:var(--text)}
 </style>
-<script>
-addEventListener("DOMContentLoaded", () => {
-  const list = document.getElementById("list");
-  if (!list) return;
-  const out = document.getElementById("out"), trayn = document.getElementById("trayn");
-  const rows = [...list.querySelectorAll(".row")];
-  const text = r => {
-    const q = r.querySelector(".rq").innerText.trim();
-    const c = r.querySelector(".rc").innerText.trim();
-    return q + "\n\n" + c;
-  };
-  const render = () => {
-    const on = rows.filter(r => r.querySelector(".cx").checked);
-    rows.forEach(r => r.classList.toggle("sel", r.querySelector(".cx").checked));
-    out.value = on.map(text).join("\n\n---\n\n");
-    trayn.textContent = on.length + " selected";
-  };
-  list.addEventListener("change", render);
-  document.getElementById("all").onclick = () => { rows.forEach(r => r.querySelector(".cx").checked = true); render(); };
-  document.getElementById("none").onclick = () => { rows.forEach(r => r.querySelector(".cx").checked = false); render(); };
-  document.getElementById("copy").onclick = e => {
-    out.select(); document.execCommand("copy");
-    e.target.textContent = "Copied"; setTimeout(() => e.target.textContent = "Copy selection", 1000);
-  };
-  render();
-});
-</script>
 
 <h2>Add tab — what you see after Ctrl+Alt+A</h2>
 <p class="note">Everything that was keyboard-only now has a visible control too. Nothing here is discoverable only by knowing a shortcut.</p>
@@ -155,7 +113,9 @@ addEventListener("DOMContentLoaded", () => {
 </div>
 
 <h2>List tab — Ctrl+L</h2>
-<p class="note">Newest first so it opens on what you just saved. Per-row delete and copy appear on hover.</p>
+<p class="note">One continuous document. Press the mouse anywhere and drag as far as you like, then
+Ctrl+C. Entries alternate background, are separated by ---, and each opens with a dim blame line
+that is shown but never copied.</p>
 <div class="win">
   <div class="bar">
     <span class="t">Annotate — 20 annotations</span>
@@ -171,62 +131,31 @@ addEventListener("DOMContentLoaded", () => {
     <div class="search">
       <input placeholder="Filter annotations…  Ctrl+F" value="hetzner">
       <span class="count">2 of 20</span>
+      <button class="go ghost">Select all</button>
       <button class="go ghost">Copy all</button>
-      <button class="go ghost">Open in Sublime</button>
     </div>
-    <div class="listwrap" id="list">
-      <label class="row sel">
-        <input type="checkbox" class="cx" checked>
-        <span class="rbody">
-          <span class="rowbtns"><button class="btn" title="Copy just this">⧉</button><button class="btn x" title="Delete">✕</button></span>
-          <span class="rhead">2026-08-22 13:27 · Dedicated Servers &amp; Big VPS — Google Chrome</span>
-          <span class="rq">7. Live Auction Deals on <mark>Hetzner</mark> Right Now</span>
-          <span class="rc">→ lead article with this, show full urls</span>
-        </span>
-      </label>
-      <label class="row sel">
-        <input type="checkbox" class="cx" checked>
-        <span class="rbody">
-          <span class="rowbtns"><button class="btn" title="Copy just this">⧉</button><button class="btn x" title="Delete">✕</button></span>
-          <span class="rhead">2026-08-20 17:40 · herdr</span>
-          <span class="rq">General <mark>Hetzner</mark> Server Auction Portal</span>
-          <span class="rc">→ format as table</span>
-        </span>
-      </label>
-      <label class="row">
-        <input type="checkbox" class="cx">
-        <span class="rbody">
-          <span class="rhead">2026-08-20 17:29 · Sublime Text</span>
-          <span class="rq">https://www2.hm.com/pl_pl/customer-service/contact.html</span>
-          <span class="rc">→ test</span>
-        </span>
-      </label>
-      <label class="row">
-        <input type="checkbox" class="cx">
-        <span class="rbody">
-          <span class="rhead">2026-08-20 17:00 · Google Chrome</span>
-          <span class="rq">rld has gone digital to the point where e</span>
-          <span class="rc">→ lala</span>
-        </span>
-      </label>
-    </div>
-
-    <div class="tray">
-      <div class="trayhead">
-        <span id="trayn">2 selected</span>
-        <span class="sep">·  entries joined by ---</span>
-        <span class="selbtns">
-          <button class="mini" id="all">Select all</button>
-          <button class="mini" id="none">Clear</button>
-          <button class="mini" id="copy">Copy selection</button>
-        </span>
+    <div class="doc">
+      <div class="entry a">
+        <div class="blame">2026-08-22 13:27 · Dedicated Servers &amp; Big VPS — Google Chrome</div>
+        <div class="q">7. Live Auction Deals on <mark>Hetzner</mark> Right Now</div>
+        <div class="c">→ lead article with this, show full urls</div>
       </div>
-      <textarea class="out" id="out" spellcheck="false"></textarea>
+      <div class="docsep">---</div>
+      <div class="entry b">
+        <div class="blame">2026-08-20 17:40 · herdr</div>
+        <div class="q">General <mark>Hetzner</mark> Server Auction Portal</div>
+        <div class="c">→ format as table</div>
+      </div>
+      <div class="docsep">---</div>
+      <div class="entry a">
+        <div class="blame">2026-08-20 17:29 · Sublime Text</div>
+        <div class="q">https://www2.hm.com/pl_pl/customer-service/contact.html</div>
+        <div class="c">→ test</div>
+      </div>
     </div>
-
     <div class="foot">
       <span class="status ok">Saved 20 entries.</span>
-      <span class="hint">Ctrl+Enter</span>
+      <span class="hint">drag to select · Ctrl+C</span>
       <button class="go ghost">Revert</button>
       <button class="go primary">Save edits</button>
     </div>
@@ -243,8 +172,10 @@ addEventListener("DOMContentLoaded", () => {
   <div><b>Buttons for every shortcut</b> — Add, Cancel, Save, Revert</div>
   <div><b>Editable quote</b> before saving</div>
   <div><b>Filter</b> the list</div>
-  <div><b>Delete</b> and <b>copy</b> per entry</div>
-  <div><b>Copy all</b> — parity with the Python app</div>
+  <div><b>Drag</b> a selection across as many entries as you like</div>
+  <div><b>Alternating backgrounds</b>, --- separators</div>
+  <div><b>Dim date, time and source</b> shown but never copied</div>
+  <div><b>Copy all</b> and <b>Select all</b></div>
   <div><b>Char count</b> on the capture</div>
   <div><b>Entry count</b> in the title</div>
 </div>
