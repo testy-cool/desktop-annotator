@@ -7,6 +7,10 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 
+COPY_RESPONSE_TIMEOUT = 0.18
+COPY_POLL_INTERVAL = 0.008
+
+
 @dataclass(frozen=True)
 class TextCandidate:
     label: str
@@ -50,27 +54,70 @@ def _write_clipboard(text: str) -> bool:
     return result.returncode == 0
 
 
-def copy_focused_selection() -> str:
-    previous = _read_x_selection("clipboard")
+def _send_copy_keystroke() -> None:
+    subprocess.run(
+        ["xdotool", "key", "--clearmodifiers", "ctrl+c"],
+        check=False,
+        capture_output=True,
+        timeout=1,
+    )
+
+
+def _await_copied_text(
+    sentinel: str,
+    *,
+    clipboard_reader: Callable[[], str],
+    sleep: Callable[[float], None],
+    monotonic: Callable[[], float],
+) -> str:
+    """Wait only as long as the focused application actually needs.
+
+    The clipboard still holds the sentinel until the application answers the
+    keystroke, so anything else means the copy landed. An empty read is treated
+    as "not yet" rather than as an answer, because xclip also returns empty
+    while ownership is changing hands.
+    """
+    deadline = monotonic() + COPY_RESPONSE_TIMEOUT
+    while True:
+        copied = clipboard_reader()
+        if copied and copied != sentinel:
+            return copied
+        if monotonic() >= deadline:
+            return ""
+        sleep(COPY_POLL_INTERVAL)
+
+
+def copy_focused_selection(
+    *,
+    clipboard_reader: Callable[[], str] | None = None,
+    clipboard_writer: Callable[[str], bool] | None = None,
+    key_sender: Callable[[], None] | None = None,
+    sleep: Callable[[float], None] = time.sleep,
+    monotonic: Callable[[], float] = time.monotonic,
+) -> str:
+    clipboard_reader = clipboard_reader or read_clipboard_selection
+    clipboard_writer = clipboard_writer or _write_clipboard
+    key_sender = key_sender or _send_copy_keystroke
+
+    previous = clipboard_reader()
     sentinel = f"desktop-annotator-{uuid.uuid4()}"
-    if not _write_clipboard(sentinel):
+    if not clipboard_writer(sentinel):
         return ""
 
     try:
-        subprocess.run(
-            ["xdotool", "key", "--clearmodifiers", "ctrl+c"],
-            check=False,
-            capture_output=True,
-            timeout=1,
+        key_sender()
+        copied = _await_copied_text(
+            sentinel,
+            clipboard_reader=clipboard_reader,
+            sleep=sleep,
+            monotonic=monotonic,
         )
-        time.sleep(0.18)
-        copied = _read_x_selection("clipboard")
     except (FileNotFoundError, subprocess.TimeoutExpired):
         copied = ""
     finally:
-        _write_clipboard(previous)
+        clipboard_writer(previous)
 
-    return "" if copied == sentinel else copied
+    return copied
 
 
 def capture_selected_text(
