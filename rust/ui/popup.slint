@@ -1,18 +1,31 @@
 import { ScrollView } from "std-widgets.slint";
 
+export struct Entry {
+    stamp: string,
+    source: string,
+    quote: string,
+    comment: string,
+}
+
 export component Popup inherits Window {
     // Defaults exist only so the standalone previewer shows realistic content.
     // Rust overwrites all three before the window is shown.
     in property <string> quote: "The selected text appears here. This default only shows up in the previewer, so the layout can be judged against a realistic amount of text rather than an empty box. It wraps at word boundaries.";
     in property <string> source: "Firefox — Agent response";
     in property <string> stamp: "11:53";
-    out property <string> comment <=> input.text;
+    in-out property <string> comment;
 
     // Empty when only one capture source exists; the picker hides itself then.
     in property <[string]> candidate-labels: ["Selected text", "Clipboard"];
     in-out property <int> candidate: 0;
 
     in-out property <string> status;
+    in-out property <int> tab: 0;            // 0 = add, 1 = list
+    in-out property <[Entry]> entries;
+
+    callback quote-edited(int, string);
+    callback comment-edited(int, string);
+    callback save-edits();
 
     callback save();
     callback open-file();
@@ -31,14 +44,13 @@ export component Popup inherits Window {
     property <bool> entered: false;
     init => {
         root.entered = true;
-        input.focus();
     }
 
     keys := FocusScope {
         key-pressed(event) => {
             if (event.text == Key.Escape) { root.dismiss(); return accept; }
             if (event.text == Key.Return && event.modifiers.control) {
-                root.save();
+                if (root.tab == 1) { root.save-edits(); } else { root.save(); }
                 return accept;
             }
             if (event.modifiers.control && event.text == "1") {
@@ -49,6 +61,11 @@ export component Popup inherits Window {
             }
             if (event.modifiers.control && (event.text == "o" || event.text == "O")) {
                 root.open-file(); return accept;
+            }
+            if (event.modifiers.control && (event.text == "l" || event.text == "L")) {
+                root.tab = root.tab == 0 ? 1 : 0;
+                root.status = "";
+                return accept;
             }
             return reject;
         }
@@ -110,7 +127,7 @@ export component Popup inherits Window {
                     alignment: start;
                     height: 22px;
                     for label[i] in root.candidate-labels : Rectangle {
-                        width: tab.preferred-width + 18px;
+                        width: picklabel.preferred-width + 18px;
                         background: root.candidate == i ? #303030 : transparent;
                         border-width: 1px;
                         border-color: root.candidate == i ? #5a5a5a : #2e2e2e;
@@ -119,7 +136,7 @@ export component Popup inherits Window {
                             mouse-cursor: pointer;
                             clicked => { root.pick(i); }
                         }
-                        tab := Text {
+                        picklabel := Text {
                             text: "\{label}  ^\{i + 1}";
                             font-size: 11px;
                             color: root.candidate == i ? #e0e0e0 : #7a7a7a;
@@ -129,8 +146,64 @@ export component Popup inherits Window {
                     }
                 }
 
-                // the captured quote
-                Rectangle {
+                if root.tab == 0 : VerticalLayout {
+                    spacing: 10px;
+                    // the captured quote
+                    Rectangle {
+                        vertical-stretch: 1;
+                        background: #232323;
+                        border-width: 1px;
+                        border-color: #303030;
+                        clip: true;
+
+                        ScrollView {
+                            horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
+                            x: 12px; y: 10px;
+                            width: parent.width - 24px;
+                            height: parent.height - 20px;
+                            viewport-width: root.width - 64px;
+                            Text {
+                                y: 0px;
+                                width: root.width - 64px;
+                                text: root.quote;
+                                wrap: word-wrap;
+                                font-size: 13px;
+                                color: #cfcfcf;
+                            }
+                        }
+                    }
+
+                    // the comment
+                    Rectangle {
+                        height: 120px;
+                        background: #232323;
+                        border-width: 1px;
+                        border-color: input.has-focus ? #6e6e6e : #303030;
+                        animate border-color { duration: 120ms; }
+                        clip: true;
+
+                        input := TextInput {
+                            init => { self.focus(); }
+                            text <=> root.comment;
+                            x: 12px; y: 10px;
+                            width: parent.width - 24px;
+                            height: parent.height - 20px;
+                            wrap: word-wrap;
+                            font-size: 13px;
+                            color: #eaeaea;
+                            selection-background-color: #4a4a4a;
+                            single-line: false;
+                        }
+                        Text {
+                            x: 12px; y: 10px;
+                            text: input.text == "" ? "comment" : "";
+                            font-size: 13px;
+                            color: #5a5a5a;
+                        }
+                    }
+                }
+
+                if root.tab == 1 : Rectangle {
                     vertical-stretch: 1;
                     background: #232323;
                     border-width: 1px;
@@ -139,45 +212,46 @@ export component Popup inherits Window {
 
                     ScrollView {
                         horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
-                        x: 12px; y: 10px;
-                        width: parent.width - 24px;
-                        height: parent.height - 20px;
-                        viewport-width: root.width - 64px;
-                        Text {
-                            y: 0px;
-                            width: root.width - 64px;
-                            text: root.quote;
-                            wrap: word-wrap;
-                            font-size: 13px;
-                            color: #cfcfcf;
+                        x: 1px; y: 1px;
+                        width: parent.width - 2px;
+                        height: parent.height - 2px;
+                        viewport-width: root.width - 34px;
+
+                        VerticalLayout {
+                            alignment: start;
+                            for entry[i] in root.entries : Rectangle {
+                                // Heynote-style alternating bands, full width.
+                                background: mod(i, 2) == 0 ? #202020 : #262626;
+                                VerticalLayout {
+                                    padding: 10px;
+                                    spacing: 4px;
+                                    Text {
+                                        text: entry.stamp + "  ·  " + entry.source;
+                                        font-size: 10px;
+                                        color: #6a6a6a;
+                                        overflow: elide;
+                                    }
+                                    q := TextInput {
+                                        text: entry.quote;
+                                        wrap: word-wrap;
+                                        font-size: 13px;
+                                        color: #cfcfcf;
+                                        selection-background-color: #4a4a4a;
+                                        single-line: false;
+                                        edited => { root.quote-edited(i, q.text); }
+                                    }
+                                    c := TextInput {
+                                        text: "\u{2192} " + entry.comment;
+                                        wrap: word-wrap;
+                                        font-size: 13px;
+                                        color: #eaeaea;
+                                        selection-background-color: #4a4a4a;
+                                        single-line: false;
+                                        edited => { root.comment-edited(i, c.text); }
+                                    }
+                                }
+                            }
                         }
-                    }
-                }
-
-                // the comment
-                Rectangle {
-                    height: 120px;
-                    background: #232323;
-                    border-width: 1px;
-                    border-color: input.has-focus ? #6e6e6e : #303030;
-                    animate border-color { duration: 120ms; }
-                    clip: true;
-
-                    input := TextInput {
-                        x: 12px; y: 10px;
-                        width: parent.width - 24px;
-                        height: parent.height - 20px;
-                        wrap: word-wrap;
-                        font-size: 13px;
-                        color: #eaeaea;
-                        selection-background-color: #4a4a4a;
-                        single-line: false;
-                    }
-                    Text {
-                        x: 12px; y: 10px;
-                        text: input.text == "" ? "comment" : "";
-                        font-size: 13px;
-                        color: #5a5a5a;
                     }
                 }
 
@@ -191,7 +265,7 @@ export component Popup inherits Window {
                     }
                     Rectangle { horizontal-stretch: 1; min-width: 8px; }
                     Text {
-                        text: "Ctrl+Enter save   Ctrl+O open file   Esc close";
+                        text: root.tab == 0 ? "Ctrl+Enter save   Ctrl+L list   Ctrl+O open file   Esc close" : "Ctrl+Enter save edits   Ctrl+L back   Ctrl+O open file   Esc close";
                         font-size: 11px;
                         color: #5a5a5a;
                     }

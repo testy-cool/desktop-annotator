@@ -11,7 +11,14 @@ signal-hook = "0.4"
 [build-dependencies]
 slint-build = "1.17.1"
 
+# Fat LTO plus opt-level "z" cost 2-5 minutes of every core per build, for a
+# binary a few MB smaller. Not a trade worth making on a tool this size.
 [profile.release]
-opt-level = "z"
-lto = true
+opt-level = 2
+lto = "thin"
 strip = true
+
+# For the edit loop. Most .slint changes need no cargo run at all: use
+# `slint-viewer --check` (~50ms) or `--auto-reload` instead.
+[profile.dev]
+opt-level = 0

@@ -5,6 +5,9 @@ mod positioning;
 mod screen;
 
 use annotation::Annotation;
+use annotation::Entry as StoredEntry;
+use std::cell::RefCell;
+use std::rc::Rc;
 use std::process::Command;
 
 slint::include_modules!();
@@ -149,6 +152,74 @@ fn main() -> Result<(), slint::PlatformError> {
             ui.set_candidate(index);
             ui.set_quote(text.clone().into());
             ui.set_source(source.clone().into());
+        });
+    }
+
+    // the List tab: entries live in Rust, the UI reports each edit back
+    // Held newest-first so the List tab opens on the most recent entry without
+// any scrolling. The file itself stays oldest-first, so saving reverses back.
+let entries: Rc<RefCell<Vec<StoredEntry>>> = Rc::new(RefCell::new({
+        let mut loaded = annotation::load_entries(&directory);
+        loaded.reverse();
+        loaded
+    }));
+    let push_entries = {
+        let weak = ui.as_weak();
+        let entries = entries.clone();
+        move || {
+            let Some(ui) = weak.upgrade() else { return };
+            let rows: Vec<Entry> = entries
+                .borrow()
+                .iter()
+                .map(|e| Entry {
+                    stamp: e.stamp.clone().into(),
+                    source: e.source.clone().into(),
+                    quote: e.quote.clone().into(),
+                    comment: e.comment.clone().into(),
+                })
+                .collect();
+            ui.set_entries(slint::ModelRc::new(slint::VecModel::from(rows)));
+        }
+    };
+    push_entries();
+
+    {
+        let entries = entries.clone();
+        ui.on_quote_edited(move |i, text| {
+            if let Some(entry) = entries.borrow_mut().get_mut(i as usize) {
+                entry.quote = text.to_string();
+            }
+        });
+    }
+    {
+        let entries = entries.clone();
+        ui.on_comment_edited(move |i, text| {
+            if let Some(entry) = entries.borrow_mut().get_mut(i as usize) {
+                // the row shows the arrow prefix; it is presentation, not content
+                entry.comment = text
+                    .trim_start_matches('\u{2192}')
+                    .trim_start()
+                    .to_string();
+            }
+        });
+    }
+    {
+        let weak = ui.as_weak();
+        let entries = entries.clone();
+        let directory = directory.clone();
+        ui.on_save_edits(move || {
+            let Some(ui) = weak.upgrade() else { return };
+            let entries = entries.borrow().clone();
+            if entries.iter().any(|e| e.quote.trim().is_empty() || e.comment.trim().is_empty()) {
+                ui.set_status("Fix empty quotes or comments before saving.".into());
+                return;
+            }
+            let mut chronological = entries.clone();
+            chronological.reverse();
+            match annotation::save_entries(&chronological, &directory) {
+                Ok(_) => ui.set_status(format!("Saved {} entries.", entries.len()).into()),
+                Err(e) => ui.set_status(format!("Could not save: {e}").into()),
+            }
         });
     }
 
