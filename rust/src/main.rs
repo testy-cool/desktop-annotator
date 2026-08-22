@@ -45,6 +45,52 @@ fn open_in_editor(path: &std::path::Path) {
     notify("Could not find an editor to open annotations.md");
 }
 
+/// Muffin does not give this window keyboard focus on its own, so Slint draws a
+/// blinking caret in a window that never receives a key event. Slint cannot ask
+/// the window manager for activation, so we ask through X11.
+///
+/// Two traps, both found by measurement: the window is findable roughly 25ms
+/// before the window manager has finished managing it, and `xdotool
+/// windowactivate` exits 0 even when it silently fails on such a window. So the
+/// only reliable signal is whether focus actually moved. Retry until it did.
+fn activate_own_window() {
+    let pid = std::process::id().to_string();
+    std::thread::spawn(move || {
+        let xdotool = |args: &[&str]| -> String {
+            Command::new("xdotool")
+                .args(args)
+                .output()
+                .ok()
+                .filter(|o| o.status.success())
+                .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+                .unwrap_or_default()
+        };
+
+        let mut window = String::new();
+        for _ in 0..60 {
+            let found = xdotool(&["search", "--pid", &pid, "--name", "Annotate"]);
+            if let Some(id) = found.lines().last().filter(|l| !l.is_empty()) {
+                window = id.to_string();
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(25));
+        }
+        if window.is_empty() {
+            return;
+        }
+
+        for _ in 0..12 {
+            let _ = Command::new("xdotool")
+                .args(["windowactivate", &window])
+                .output();
+            if xdotool(&["getwindowfocus"]) == window {
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(40));
+        }
+    });
+}
+
 fn place_on_monitor_to_the_right(window: &slint::Window) {
     let monitors = screen::monitors();
     let Some((px, py)) = screen::pointer() else { return };
@@ -76,6 +122,7 @@ fn main() -> Result<(), slint::PlatformError> {
     let directory = annotation::annotations_dir();
 
     let ui = Popup::new()?;
+    ui.set_framed(std::env::var("ANNOT_FRAMED").is_ok());
     ui.set_stamp(stamp.clone().into());
     ui.set_quote(candidates[0].text.clone().into());
     ui.set_source(capture::annotation_source(candidates[0].label, &window_title).into());
@@ -162,6 +209,7 @@ fn main() -> Result<(), slint::PlatformError> {
     });
 
     ui.show()?;
+    activate_own_window();
     slint::run_event_loop()?;
     Ok(())
 }

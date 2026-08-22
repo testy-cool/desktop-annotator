@@ -21,7 +21,8 @@ export component Popup inherits Window {
     callback pick(int);
 
     title: "Annotate";
-    no-frame: true;
+    in property <bool> framed: false;
+    no-frame: !root.framed;
     always-on-top: true;
     background: transparent;
     width: 720px;

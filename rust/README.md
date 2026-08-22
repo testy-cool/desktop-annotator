@@ -35,3 +35,34 @@ Slint exposes `set_position` but no monitor enumeration, so the monitor layout
 comes from `xrandr --listmonitors` and the pointer from `xdotool
 getmouselocation`. Both are parsed in `screen.rs` against captured real output,
 so the formats are covered by tests. This is the X11-only part.
+
+## Keyboard focus
+
+Muffin does not hand this window keyboard focus by itself, so Slint would draw a
+blinking caret in a window that never receives a key event. Slint cannot ask the
+window manager for activation, so `activate_own_window` does it through X11.
+
+Two traps, both found by measurement rather than reading:
+
+- The window is findable by `xdotool search` roughly 25ms before the window
+  manager has finished managing it. Activating in that gap fails with
+  `XGetWindowProperty[_NET_WM_DESKTOP] failed`.
+- `xdotool windowactivate` exits 0 even when it silently fails that way.
+
+So the only trustworthy signal is whether focus actually moved. The code retries
+until `getwindowfocus` reports our own window.
+
+`ANNOT_FRAMED=1` gives the window normal decorations, which also restores the
+close button and resizing. Focus works either way; framing was ruled out as the
+cause.
+
+## Testing this
+
+A bare Xvfb has no window manager, so activation cannot succeed there and typing
+never reaches the window. Run one in the harness:
+
+    Xvfb :87 -screen 0 1400x900x24 &
+    DISPLAY=:87 metacity &
+
+Never drive the real display with `xdotool type`. If the popup does not hold
+focus, the keystrokes go into whatever application does.
