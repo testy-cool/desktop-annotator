@@ -1,0 +1,201 @@
+import { ScrollView } from "std-widgets.slint";
+
+export component Popup inherits Window {
+    // Defaults exist only so the standalone previewer shows realistic content.
+    // Rust overwrites all three before the window is shown.
+    in property <string> quote: "The selected text appears here. This default only shows up in the previewer, so the layout can be judged against a realistic amount of text rather than an empty box. It wraps at word boundaries.";
+    in property <string> source: "Firefox — Agent response";
+    in property <string> stamp: "11:53";
+    out property <string> comment <=> input.text;
+
+    // Empty when only one capture source exists; the picker hides itself then.
+    in property <[string]> candidate-labels: ["Selected text", "Clipboard"];
+    in-out property <int> candidate: 0;
+
+    in-out property <string> status;
+
+    callback save();
+    callback open-file();
+    callback dismiss();
+    callback drag-by(length, length);
+    callback pick(int);
+
+    title: "Annotate";
+    no-frame: true;
+    always-on-top: true;
+    background: transparent;
+    width: 720px;
+    height: 440px;
+
+    property <bool> entered: false;
+    init => {
+        root.entered = true;
+        input.focus();
+    }
+
+    keys := FocusScope {
+        key-pressed(event) => {
+            if (event.text == Key.Escape) { root.dismiss(); return accept; }
+            if (event.text == Key.Return && event.modifiers.control) {
+                root.save();
+                return accept;
+            }
+            if (event.modifiers.control && event.text == "1") {
+                root.pick(0); return accept;
+            }
+            if (event.modifiers.control && event.text == "2") {
+                root.pick(1); return accept;
+            }
+            if (event.modifiers.control && (event.text == "o" || event.text == "O")) {
+                root.open-file(); return accept;
+            }
+            return reject;
+        }
+
+        Rectangle {
+            opacity: root.entered ? 1.0 : 0.0;
+            animate opacity { duration: 90ms; }
+
+            width: root.width - 16px;
+            height: root.height - 16px;
+            background: #1c1c1c;
+            border-width: 1px;
+            border-color: #383838;
+            drop-shadow-blur: 16px;
+            drop-shadow-color: #00000080;
+            drop-shadow-offset-y: 4px;
+
+            VerticalLayout {
+                padding: 16px;
+                spacing: 10px;
+
+                // header, doubles as the drag handle
+                Rectangle {
+                    height: 20px;
+
+                    grip := TouchArea {
+                        mouse-cursor: move;
+                        moved => {
+                            if (self.pressed) {
+                                root.drag-by(
+                                    self.mouse-x - self.pressed-x,
+                                    self.mouse-y - self.pressed-y,
+                                );
+                            }
+                        }
+                    }
+
+                    HorizontalLayout {
+                        spacing: 8px;
+                        alignment: start;
+                        Text {
+                            text: root.source;
+                            font-size: 12px;
+                            color: grip.has-hover ? #c8c8c8 : #909090;
+                            animate color { duration: 120ms; }
+                            overflow: elide;
+                        }
+                        Rectangle { horizontal-stretch: 1; min-width: 12px; }
+                        Text {
+                            text: root.stamp;
+                            font-size: 12px;
+                            color: #6a6a6a;
+                        }
+                    }
+                }
+
+                if root.candidate-labels.length > 1 : HorizontalLayout {
+                    spacing: 6px;
+                    alignment: start;
+                    height: 22px;
+                    for label[i] in root.candidate-labels : Rectangle {
+                        width: tab.preferred-width + 18px;
+                        background: root.candidate == i ? #303030 : transparent;
+                        border-width: 1px;
+                        border-color: root.candidate == i ? #5a5a5a : #2e2e2e;
+                        animate background, border-color { duration: 120ms; }
+                        TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => { root.pick(i); }
+                        }
+                        tab := Text {
+                            text: "\{label}  ^\{i + 1}";
+                            font-size: 11px;
+                            color: root.candidate == i ? #e0e0e0 : #7a7a7a;
+                            vertical-alignment: center;
+                            horizontal-alignment: center;
+                        }
+                    }
+                }
+
+                // the captured quote
+                Rectangle {
+                    vertical-stretch: 1;
+                    background: #232323;
+                    border-width: 1px;
+                    border-color: #303030;
+                    clip: true;
+
+                    ScrollView {
+                        horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
+                        x: 12px; y: 10px;
+                        width: parent.width - 24px;
+                        height: parent.height - 20px;
+                        viewport-width: root.width - 64px;
+                        Text {
+                            y: 0px;
+                            width: root.width - 64px;
+                            text: root.quote;
+                            wrap: word-wrap;
+                            font-size: 13px;
+                            color: #cfcfcf;
+                        }
+                    }
+                }
+
+                // the comment
+                Rectangle {
+                    height: 120px;
+                    background: #232323;
+                    border-width: 1px;
+                    border-color: input.has-focus ? #6e6e6e : #303030;
+                    animate border-color { duration: 120ms; }
+                    clip: true;
+
+                    input := TextInput {
+                        x: 12px; y: 10px;
+                        width: parent.width - 24px;
+                        height: parent.height - 20px;
+                        wrap: word-wrap;
+                        font-size: 13px;
+                        color: #eaeaea;
+                        selection-background-color: #4a4a4a;
+                        single-line: false;
+                    }
+                    Text {
+                        x: 12px; y: 10px;
+                        text: input.text == "" ? "comment" : "";
+                        font-size: 13px;
+                        color: #5a5a5a;
+                    }
+                }
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    Text {
+                        text: root.status;
+                        font-size: 11px;
+                        color: #d08a70;
+                        overflow: elide;
+                    }
+                    Rectangle { horizontal-stretch: 1; min-width: 8px; }
+                    Text {
+                        text: "Ctrl+Enter save   Ctrl+O open file   Esc close";
+                        font-size: 11px;
+                        color: #5a5a5a;
+                    }
+                }
+            }
+        }
+    }
+}
