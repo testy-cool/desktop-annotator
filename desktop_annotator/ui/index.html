@@ -20,7 +20,8 @@
        color:var(--dim);font-size:15px;cursor:pointer;border-radius:2px;font-family:inherit}
   .btn:hover{background:#2c2c2c;color:var(--text)}
   .btn.x:hover{background:#a33;color:#fff}
-  .tabs{display:flex;border-bottom:1px solid var(--line);background:#191919;flex:none}
+  .tabs{display:flex;border-bottom:1px solid var(--line);background:#191919;flex:none;
+        user-select:none}
   .tab{padding:8px 16px;font-size:12px;color:var(--faint);cursor:pointer;font-family:inherit;
        border:0;background:transparent;border-bottom:2px solid transparent}
   .tab:hover{color:var(--text)}
@@ -42,7 +43,7 @@
   textarea:focus,input:focus{border-color:var(--accent)}
   #quote{flex:1 1 auto;min-height:96px;max-height:42%;color:#cfcfcf}
   #comment{flex:1 1 auto;min-height:88px;border-color:var(--accent)}
-  .foot{display:flex;align-items:center;gap:8px;flex:none}
+  .foot{display:flex;align-items:center;gap:8px;flex:none;user-select:none}
   .status{font-size:11px;color:var(--danger);flex:1;overflow:hidden;text-overflow:ellipsis;
           white-space:nowrap}
   .status.ok{color:var(--ok)}
@@ -54,46 +55,24 @@
   .go.primary:hover{background:#37568c}
   .go.ghost{background:transparent;color:var(--dim);border-color:transparent}
   .go.ghost:hover{background:#252525;color:var(--text)}
-  .search{display:flex;gap:8px;align-items:center;flex:none}
+  .search{display:flex;gap:8px;align-items:center;flex:none;user-select:none}
   .search input{flex:1;padding:6px 10px;font-size:12px}
-  .listwrap{border:1px solid var(--line);background:var(--panel);flex:1;min-height:80px;
-            overflow:auto}
-  .row{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;
-       border-bottom:1px solid #1b1b1b;position:relative}
-  .row:nth-child(odd){background:#202020}
-  .row:nth-child(even){background:#262626}
-  .row.sel{background:#243044;box-shadow:inset 2px 0 0 var(--accent)}
-  .row:hover .rowbtns{opacity:1}
-  .rowbtns{position:absolute;top:6px;right:8px;display:flex;gap:2px;opacity:0;
-           transition:opacity .12s}
-  .rowbtns .btn{width:24px;height:22px;font-size:12px}
-  .cx{margin:2px 0 0;accent-color:var(--accent);width:15px;height:15px;flex:none;cursor:pointer}
-  .rbody{flex:1;min-width:0}
-  .rhead{font-size:10px;color:var(--faint);margin-bottom:5px;padding-right:60px}
-  .rq,.rc{font-size:13px;white-space:pre-wrap;word-wrap:break-word;outline:none;
-          border:1px solid transparent;padding:1px 3px;margin:0 -3px}
-  .rq{color:#cfcfcf;max-height:5.4em;overflow:hidden}
-  .rc{color:var(--text);margin-top:2px;max-height:4.2em;overflow:hidden}
-  .row.clamped .rq{-webkit-mask-image:linear-gradient(#000 55%,transparent)}
-  .row.open .rq,.row.open .rc{max-height:none;-webkit-mask-image:none}
-  .more{display:none;margin-top:4px;font-size:11px;color:var(--faint);background:none;
-        border:0;padding:0;cursor:pointer;font-family:inherit}
-  .more:hover{color:var(--accent)}
-  .row.clamped .more{display:block}
-  .row.open .more{display:block}
-  .rq:focus,.rc:focus{border-color:var(--line2);background:#1b1b1b}
-  .empty{padding:22px 14px;color:var(--faint);font-size:12px}
+
+  /* one continuous document: drag anywhere, select across as many entries as you like */
+  #doc{flex:1;min-height:80px;overflow:auto;border:1px solid var(--line);background:var(--panel);
+       font-size:13px;outline:none;padding:0;cursor:text;white-space:normal}
+  #doc:focus{border-color:var(--line2)}
+  .entry{padding:10px 14px 12px}
+  .entry.a{background:#202020}
+  .entry.b{background:#262626}
+  /* dim reference line, like a blame annotation: shown, never copied, never edited */
+  .blame{font-size:10px;color:var(--faint);margin-bottom:5px;user-select:none;
+         -webkit-user-select:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .q{color:#cfcfcf;white-space:pre-wrap;word-wrap:break-word}
+  .c{color:var(--text);white-space:pre-wrap;word-wrap:break-word;margin-top:2px}
+  .sep{color:var(--faint);font-size:13px;padding:0 14px;line-height:2.1;background:#1d1d1d}
+  .empty{padding:22px 14px;color:var(--faint);font-size:12px;user-select:none}
   mark{background:#3a3a1a;color:#e8e0a0;padding:0 2px}
-  .tray{display:flex;flex-direction:column;gap:6px;flex:none}
-  .trayhead{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--dim)}
-  .sep{color:var(--faint)}
-  .selbtns{display:flex;gap:6px;margin-left:auto}
-  .mini{font-size:11px;padding:3px 9px;border:1px solid var(--line);background:transparent;
-        color:var(--dim);cursor:pointer;font-family:inherit}
-  .mini:hover{background:#2a2a2a;color:var(--text)}
-  #out{width:100%;height:110px;background:#1a1a1a;color:#d8d8d8;white-space:pre-wrap;
-       word-break:break-word;
-       font:12px/1.55 ui-monospace,"JetBrains Mono",Menlo,monospace;overflow:auto}
   .grip{position:fixed;right:0;bottom:0;width:16px;height:16px;cursor:nwse-resize;z-index:5;
         background:repeating-linear-gradient(135deg,transparent,transparent 2px,#4a4a4a 2px,#4a4a4a 3px)}
 </style>
@@ -134,24 +113,13 @@
     <div class="search">
       <input id="filter" placeholder="Filter annotations&#8230;  Ctrl+F" spellcheck="false">
       <span class="count" id="shown"></span>
+      <button class="go ghost" id="selectall">Select all</button>
       <button class="go ghost" id="copyall">Copy all</button>
     </div>
-    <div class="listwrap" id="list"></div>
-    <div class="tray">
-      <div class="trayhead">
-        <span id="trayn">0 selected</span>
-        <span class="sep">&#183; joined by ---</span>
-        <span class="selbtns">
-          <button class="mini" id="all">Select all</button>
-          <button class="mini" id="none">Clear</button>
-          <button class="mini" id="copysel">Copy selection</button>
-        </span>
-      </div>
-      <textarea id="out" readonly spellcheck="false"></textarea>
-    </div>
+    <div id="doc" contenteditable spellcheck="false"></div>
     <div class="foot">
       <span class="status" id="liststatus"></span>
-      <span class="hint">Ctrl+Enter</span>
+      <span class="hint">drag to select · Ctrl+C</span>
       <button class="go ghost" id="revert">Revert</button>
       <button class="go primary" id="save">Save edits</button>
     </div>
@@ -165,6 +133,12 @@ const host = m => window.webkit.messageHandlers.host.postMessage(JSON.stringify(
 const $ = id => document.getElementById(id);
 const esc = s => s.replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
 
+function setStatus(id, text, ok) {
+  const el = $(id);
+  el.textContent = text;
+  el.classList.toggle("ok", !!ok);
+}
+
 /* ---------- window chrome ---------- */
 $("close").onclick = () => host({action:"close"});
 $("minimise").onclick = () => host({action:"minimise"});
@@ -176,9 +150,7 @@ $("grip").addEventListener("mousedown", e => { e.preventDefault(); host({action:
 const showPane = name => {
   document.querySelectorAll(".tab").forEach(t => t.classList.toggle("on", t.dataset.pane === name));
   document.querySelectorAll(".pane").forEach(p => p.classList.toggle("on", p.id === "pane-" + name));
-  if (name === "add") { $("comment").focus(); return; }
-  $("filter").focus();
-  clampRows();  // rows measure zero while the pane is hidden
+  if (name === "add") $("comment").focus(); else $("filter").focus();
 };
 document.querySelectorAll(".tab").forEach(t => t.onclick = () => showPane(t.dataset.pane));
 
@@ -215,26 +187,12 @@ const addAnnotation = () => {
 $("add").onclick = addAnnotation;
 $("cancel").onclick = () => host({action:"close"});
 
-function setStatus(id, text, ok) {
-  const el = $(id);
-  el.textContent = text;
-  el.classList.toggle("ok", !!ok);
-}
+/* ---------- the list, as one document ---------- */
+let entries = S.entries.map((e, i) => ({...e, id:i}));
+const doc = $("doc");
 
-/* ---------- list pane ---------- */
-let entries = S.entries.map((e, i) => ({...e, id:i, on:false}));
-let dirty = false;
-
-const bodyText = e => e.quote + "\n\n→ " + e.comment;
-
-function markDirty() {
-  dirty = true;
-  setStatus("liststatus", "Unsaved edits.", false);
-}
-
-function renderList() {
+function renderDoc() {
   const q = $("filter").value.trim().toLowerCase();
-  const list = $("list");
   const visible = entries.filter(e =>
     !q || e.quote.toLowerCase().includes(q) || e.comment.toLowerCase().includes(q)
          || e.source.toLowerCase().includes(q));
@@ -243,122 +201,76 @@ function renderList() {
   $("title").textContent = "Annotate — " + entries.length +
                            (entries.length === 1 ? " annotation" : " annotations");
   if (!visible.length) {
-    list.innerHTML = '<div class="empty">' +
+    doc.innerHTML = '<div class="empty" contenteditable="false">' +
       (entries.length ? "Nothing matches that filter." : "No annotations yet. Add one from the Add tab.") +
       "</div>";
     return;
   }
   const hi = s => q ? esc(s).replace(new RegExp("(" + q.replace(/[.*+?^${}()|[\]\\]/g,"\\$&") + ")","gi"),
                                      "<mark>$1</mark>") : esc(s);
-  list.innerHTML = visible.map(e => `
-    <div class="row${e.on ? " sel" : ""}" data-id="${e.id}">
-      <input type="checkbox" class="cx"${e.on ? " checked" : ""}>
-      <div class="rbody">
-        <div class="rowbtns">
-          <button class="btn" data-act="copy" title="Copy just this">&#9099;</button>
-          <button class="btn x" data-act="del" title="Remove">&#10005;</button>
-        </div>
-        <div class="rhead">${esc(e.stamp)} · ${esc(e.source)}</div>
-        <div class="rq" contenteditable spellcheck="false">${hi(e.quote)}</div>
-        <div class="rc" contenteditable>→ ${hi(e.comment)}</div>
-        <button class="more" data-act="more">show all</button>
-      </div>
-    </div>`).join("");
-  clampRows();
-  renderTray();
+  doc.innerHTML = visible.map((e, i) => `
+    <div class="entry ${i % 2 ? "b" : "a"}" data-id="${e.id}">
+      <div class="blame" contenteditable="false">${esc(e.stamp)} · ${esc(e.source)}</div>
+      <div class="q">${hi(e.quote)}</div>
+      <div class="c">→ ${hi(e.comment)}</div>
+    </div>`).join('<div class="sep" contenteditable="false">---</div>');
 }
 
-function clampRows() {
-  $("list").querySelectorAll(".row").forEach(row => {
-    const over = [...row.querySelectorAll(".rq, .rc")]
-      .some(cell => cell.scrollHeight > cell.clientHeight + 2);
-    row.classList.toggle("clamped", over && !row.classList.contains("open"));
+/* What the document says now. Entries hidden by the filter pass through
+   untouched; a visible entry whose block was deleted is dropped. */
+function editedEntries() {
+  const edits = new Map();
+  doc.querySelectorAll(".entry").forEach(block => {
+    edits.set(+block.dataset.id, {
+      quote: block.querySelector(".q").innerText.replace(/\n$/, ""),
+      comment: block.querySelector(".c").innerText.replace(/\n$/, "").replace(/^→\s*/, ""),
+    });
   });
+  const shown = new Set(entries.filter(isVisible).map(e => e.id));
+  return entries
+    .filter(e => edits.has(e.id) || !shown.has(e.id))
+    .map(e => edits.has(e.id) ? {...e, ...edits.get(e.id)} : e);
 }
 
-function openRow(row, open) {
-  row.classList.toggle("open", open);
-  row.classList.toggle("clamped", !open);
-  const button = row.querySelector(".more");
-  if (button) button.textContent = open ? "show less" : "show all";
-  if (!open) clampRows();
+function isVisible(entry) {
+  const q = $("filter").value.trim().toLowerCase();
+  if (!q) return true;
+  return entry.quote.toLowerCase().includes(q) || entry.comment.toLowerCase().includes(q)
+      || entry.source.toLowerCase().includes(q);
 }
 
-$("list").addEventListener("focusin", e => {
-  const row = e.target.closest(".row");
-  if (row && e.target.matches(".rq, .rc")) openRow(row, true);
-});
+// Copy all must hand back exactly what dragging over everything would.
+const plainText = list => list.map(e => e.quote + "\n→ " + e.comment).join("\n---\n");
 
-function byId(id) { return entries.find(e => e.id === id); }
+doc.addEventListener("input", () => setStatus("liststatus", "Unsaved edits.", false));
+$("filter").addEventListener("input", renderDoc);
 
-$("list").addEventListener("change", e => {
-  if (!e.target.classList.contains("cx")) return;
-  const row = e.target.closest(".row");
-  byId(+row.dataset.id).on = e.target.checked;
-  row.classList.toggle("sel", e.target.checked);
-  renderTray();
-});
-
-$("list").addEventListener("click", e => {
-  const b = e.target.closest("[data-act]");
-  if (!b) return;
-  const row = b.closest(".row");
-  const entry = byId(+row.dataset.id);
-  if (b.dataset.act === "more") {
-    openRow(row, !row.classList.contains("open"));
-    return;
-  }
-  if (b.dataset.act === "copy") {
-    host({action:"copy", text:bodyText(entry)});
-    setStatus("liststatus", "Copied that entry.", true);
-  } else if (b.dataset.act === "del") {
-    entries = entries.filter(x => x !== entry);
-    renderList();
-    markDirty();
-    setStatus("liststatus", "1 entry removed. Save edits to apply, or Revert.", false);
-  }
-});
-
-$("list").addEventListener("input", e => {
-  const cell = e.target.closest(".rq, .rc");
-  if (!cell) return;
-  const entry = byId(+cell.closest(".row").dataset.id);
-  const text = cell.innerText.replace(/\n$/, "");
-  if (cell.classList.contains("rq")) entry.quote = text;
-  else entry.comment = text.replace(/^→\s*/, "");
-  markDirty();
-  renderTray();
-});
-
-function renderTray() {
-  const on = entries.filter(e => e.on);
-  $("trayn").textContent = on.length + " selected";
-  $("out").value = on.map(bodyText).join("\n\n---\n\n");
-}
-
-$("filter").addEventListener("input", renderList);
-$("all").onclick = () => { entries.forEach(e => e.on = true); renderList(); };
-$("none").onclick = () => { entries.forEach(e => e.on = false); renderList(); };
-$("copysel").onclick = () => {
-  if (!$("out").value) return setStatus("liststatus", "Tick some entries first.", false);
-  host({action:"copy", text:$("out").value});
-  setStatus("liststatus", entries.filter(e => e.on).length + " entries copied.", true);
+$("selectall").onclick = () => {
+  const range = document.createRange();
+  range.selectNodeContents(doc);
+  const selection = getSelection();
+  selection.removeAllRanges();
+  selection.addRange(range);
+  doc.focus();
+  setStatus("liststatus", "Everything selected. Ctrl+C to copy.", true);
 };
 $("copyall").onclick = () => {
   if (!entries.length) return;
-  host({action:"copy", text:entries.map(bodyText).join("\n\n---\n\n")});
+  host({action:"copy", text:plainText(editedEntries())});
   setStatus("liststatus", "All " + entries.length + " entries copied.", true);
 };
-$("save").onclick = () => host({action:"save",
-  entries:entries.map(e => ({stamp:e.stamp, source:e.source, quote:e.quote, comment:e.comment}))});
+$("save").onclick = () => {
+  const edited = editedEntries();
+  host({action:"save", entries:edited.map(e =>
+    ({stamp:e.stamp, source:e.source, quote:e.quote, comment:e.comment}))});
+};
 $("revert").onclick = () => host({action:"revert"});
 
 /* ---------- messages from the host ---------- */
 window.fromHost = msg => {
   if (msg.kind === "entries") {
-    entries = msg.entries.map((e, i) => ({...e, id:i, on:false}));
-    dirty = false;
-    renderList();
+    entries = msg.entries.map((e, i) => ({...e, id:i}));
+    renderDoc();
     if (msg.status) setStatus("liststatus", msg.status, true);
   } else if (msg.kind === "error") {
     setStatus(msg.pane === "add" ? "addstatus" : "liststatus", msg.status, false);
@@ -369,7 +281,6 @@ window.fromHost = msg => {
 
 /* ---------- keys ---------- */
 const listOpen = () => $("pane-list").classList.contains("on");
-addEventListener("resize", clampRows);
 addEventListener("keydown", e => {
   if (e.key === "Escape") { host({action:"close"}); return; }
   if (!e.ctrlKey) return;
@@ -378,9 +289,11 @@ addEventListener("keydown", e => {
   else if (k === "1") { e.preventDefault(); showPane("add"); }
   else if (k === "2" || k === "l") { e.preventDefault(); showPane("list"); }
   else if (k === "f") { e.preventDefault(); showPane("list"); $("filter").select(); }
-  else if (k === "c" && e.shiftKey) { e.preventDefault(); showPane("list"); $("copysel").click(); }
+  else if (k === "a" && listOpen() && doc.contains(document.activeElement)) {
+    e.preventDefault(); $("selectall").click();
+  }
 });
 
-renderList();
+renderDoc();
 showPane(S.entries.length && !S.candidates.length ? "list" : "add");
 </script>
