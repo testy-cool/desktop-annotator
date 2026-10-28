@@ -1,4 +1,5 @@
 import unittest
+import tempfile
 from unittest.mock import Mock, patch
 from pathlib import Path
 
@@ -19,6 +20,7 @@ from desktop_annotator.app import (
     _schedule_list_scroll_to_bottom,
     _scroll_text_view_to_bottom,
     _show_list_page,
+    show_annotation_popup,
 )
 
 
@@ -436,6 +438,44 @@ class SublimeDraftSafetyTests(unittest.TestCase):
             _open_list_in_sublime(window, Path("/tmp/annotations.md"))
         window.close.assert_not_called()
         self.assertIn("Could not launch", window.list_status.set_text.call_args.args[0])
+
+
+class LegacyFileLoadTests(unittest.TestCase):
+    def window_class(self, directory):
+        """Capture the GTK window class without creating display widgets."""
+        classes = []
+
+        class Captured(Exception):
+            pass
+
+        class Window:
+            def __new__(cls):
+                classes.append(cls)
+                raise Captured
+
+        with patch("desktop_annotator.app._load_gtk", return_value=(Mock(), Mock(Window=Window), Mock())):
+            with self.assertRaises(Captured):
+                show_annotation_popup(candidates=[], source="Firefox", directory=directory)
+        return classes[0]
+
+    def test_invalid_legacy_utf8_disables_saving_and_reports_load_problem(self):
+        with tempfile.TemporaryDirectory() as name:
+            directory = Path(name)
+            legacy = directory / "2026-08-22.md"
+            legacy.write_bytes(b"\xff legacy annotation")
+            window_class = self.window_class(directory)
+            window = object.__new__(window_class)
+            window.list_status = Mock()
+            window.list_save_button = Mock()
+            window.list_view = Mock()
+
+            window._reload_list()
+
+            window.list_save_button.set_sensitive.assert_called_once_with(False)
+            self.assertIn("Could not load annotations", window.list_status.set_text.call_args.args[0])
+            self.assertFalse(window.document.entries)
+            self.assertEqual(legacy.read_bytes(), b"\xff legacy annotation")
+            self.assertFalse((directory / "annotations.md").exists())
 
 
 if __name__ == "__main__":

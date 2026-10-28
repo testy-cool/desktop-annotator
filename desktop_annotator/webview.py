@@ -136,7 +136,7 @@ class AnnotatorWindow:
 
         try:
             self.document = load_document(directory)
-        except OSError as error:
+        except (OSError, ValueError) as error:
             self.document = DocumentSnapshot(
                 directory / "annotations.md", None, (), (f"Could not load annotations: {error}",)
             )
@@ -160,7 +160,7 @@ class AnnotatorWindow:
     def _reload_entries(self, status: str) -> None:
         try:
             document = load_document(self.directory)
-        except OSError as error:
+        except (OSError, ValueError) as error:
             self._to_page({"kind": "error", "pane": "list", "status": str(error)})
             return
         self.document = document
@@ -243,7 +243,7 @@ class AnnotatorWindow:
                 {"kind": "error", "pane": "list", "status": "Could not run the subl command."}
             )
             return
-        self.window.close()
+        # Keep unsaved browser edits available while the original file is open.
 
     # ----- showing it ---------------------------------------------------
 

@@ -92,7 +92,7 @@ your mouse, so it does not cover what you are reading.
 | `Esc` | Close |
 
 The arrow button in the title bar opens `annotations.md` in Sublime Text, if you
-have the `subl` command.
+have the `subl` command. The HTML interface stays open so unsaved edits remain available.
 
 ## Requirements
 

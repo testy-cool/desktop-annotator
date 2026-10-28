@@ -454,7 +454,7 @@ def show_annotation_popup(
         def _reload_list(self):
             try:
                 self.document = load_document(directory)
-            except OSError as error:
+            except (OSError, ValueError) as error:
                 self.document = DocumentSnapshot(
                     directory / "annotations.md", None, (), (f"Could not load annotations: {error}",)
                 )
