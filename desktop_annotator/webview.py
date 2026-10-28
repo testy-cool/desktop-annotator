@@ -16,8 +16,8 @@ from pathlib import Path
 
 from desktop_annotator.annotation import (
     Annotation,
-    load_annotation_list,
-    parse_annotation_list,
+    DocumentSnapshot,
+    load_document,
 )
 from desktop_annotator.capture import TextCandidate
 from desktop_annotator.positioning import MonitorRect, popup_position
@@ -68,6 +68,7 @@ def build_state(
     source: str,
     annotations: list[Annotation],
     now: datetime | None = None,
+    save_problem: str = "",
 ) -> dict:
     stamp = (now or datetime.now()).strftime(STAMP_FORMAT)
     return {
@@ -75,6 +76,7 @@ def build_state(
         "stamp": stamp,
         "candidates": [{"label": item.label, "text": item.text} for item in candidates],
         "entries": entries_payload(annotations),
+        "saveProblem": save_problem,
     }
 
 
@@ -116,6 +118,7 @@ class AnnotatorWindow:
 
         self.window = gtk.Window(title="Annotate")
         self.window.set_default_size(WINDOW_WIDTH, WINDOW_HEIGHT)
+        self.window.set_size_request(640, 560)
         self.window.set_decorated(False)
         self.window.set_skip_taskbar_hint(False)
         self.window.connect("destroy", gtk.main_quit)
@@ -131,8 +134,16 @@ class AnnotatorWindow:
         settings.set_enable_write_console_messages_to_stdout(True)
         self.window.add(self.view)
 
-        annotations = parse_annotation_list(load_annotation_list(directory))
-        state = build_state(candidates=candidates, source=source, annotations=annotations)
+        try:
+            self.document = load_document(directory)
+        except OSError as error:
+            self.document = DocumentSnapshot(
+                directory / "annotations.md", None, (), (f"Could not load annotations: {error}",)
+            )
+        state = build_state(
+            candidates=candidates, source=source, annotations=self.document.entries,
+            save_problem=self.document.save_problem,
+        )
         self.view.load_html(page_with_state(UI_FILE.read_text(encoding="utf-8"), state), "file:///")
 
     def _rgba(self, red, green, blue, alpha):
@@ -147,8 +158,19 @@ class AnnotatorWindow:
         self.view.evaluate_javascript(script, -1, None, None, None, None, None)
 
     def _reload_entries(self, status: str) -> None:
-        annotations = parse_annotation_list(load_annotation_list(self.directory))
-        self._to_page({"kind": "entries", "entries": entries_payload(annotations), "status": status})
+        try:
+            document = load_document(self.directory)
+        except OSError as error:
+            self._to_page({"kind": "error", "pane": "list", "status": str(error)})
+            return
+        self.document = document
+        self._send_document(status)
+
+    def _send_document(self, status: str) -> None:
+        self._to_page({
+            "kind": "entries", "entries": entries_payload(self.document.entries),
+            "saveProblem": self.document.save_problem, "status": status,
+        })
 
     def _on_message(self, _manager, result) -> None:
         try:
@@ -201,11 +223,13 @@ class AnnotatorWindow:
     def _do_save(self, message) -> None:
         try:
             annotations = annotations_from_payload(message.get("entries", []))
-            self.saved_path = save_edited_annotations(annotations, self.directory)
+            document = save_edited_annotations(annotations, self.directory, expected=self.document)
         except (ValueError, KeyError, OSError) as error:
             self._to_page({"kind": "error", "pane": "list", "status": str(error)})
             return
-        self._reload_entries(f"Saved {len(annotations)} entries.")
+        self.document = document
+        self.saved_path = document.path
+        self._send_document(f"Saved {len(annotations)} entries.")
 
     def _do_revert(self, _message) -> None:
         self._reload_entries("Reverted to the saved file.")

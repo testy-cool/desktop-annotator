@@ -3,7 +3,7 @@ import unittest
 from datetime import datetime
 from pathlib import Path
 
-from desktop_annotator.annotation import Annotation, load_annotation_list, parse_annotation_list
+from desktop_annotator.annotation import Annotation, load_annotation_list, load_document, parse_annotation_list, render_annotation
 from desktop_annotator.workflow import (
     annotation_source,
     save_comment,
@@ -68,10 +68,37 @@ class EditableListWorkflowTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory_name:
             directory = Path(directory_name)
 
-            path = save_edited_annotations([entry], directory)
+            document = save_edited_annotations([entry], directory, expected=load_document(directory))
 
-            self.assertEqual(path.name, "annotations.md")
+            self.assertEqual(document.path.name, "annotations.md")
             self.assertEqual(parse_annotation_list(load_annotation_list(directory)), [entry])
+
+    def test_ambiguous_comment_header_cannot_silently_split_or_drop_an_entry(self):
+        entry = Annotation(
+            quote="Edited quote",
+            comment="Keep this\n## 2026-08-20 18:21 · Looks like metadata\n\n> Nested quote\n\n→ Nested comment",
+            source="Firefox", captured_at=datetime(2026, 8, 20, 18, 20),
+        )
+        with tempfile.TemporaryDirectory() as name:
+            directory = Path(name)
+            original = Annotation("Original quote", "Original note", "Firefox", entry.captured_at)
+            path = directory / "annotations.md"
+            path.write_text(render_annotation(original))
+            document = load_document(directory)
+            before = path.read_bytes()
+            with self.assertRaisesRegex(ValueError, "represented safely"):
+                save_edited_annotations([entry], directory, expected=document)
+            self.assertEqual(path.read_bytes(), before)
+
+    def test_empty_edited_list_requires_a_safe_unchanged_original(self):
+        with tempfile.TemporaryDirectory() as name:
+            directory = Path(name)
+            path = directory / "annotations.md"
+            before = b"A manual note that cannot be parsed.\n"
+            path.write_bytes(before)
+            with self.assertRaises(ValueError):
+                save_edited_annotations([], directory, expected=load_document(directory))
+            self.assertEqual(path.read_bytes(), before)
 
 
 if __name__ == "__main__":

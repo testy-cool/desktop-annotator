@@ -1,10 +1,14 @@
 import json
 import unittest
+import tempfile
+from pathlib import Path
+from unittest.mock import patch
 from datetime import datetime
 
-from desktop_annotator.annotation import Annotation
+from desktop_annotator.annotation import Annotation, load_document, render_annotation
 from desktop_annotator.capture import TextCandidate
 from desktop_annotator.webview import (
+    AnnotatorWindow,
     annotations_from_payload,
     build_state,
     entries_payload,
@@ -105,6 +109,69 @@ class PageWithStateTests(unittest.TestCase):
         payload = page.split("window.__STATE__=", 1)[1].split(";</script>", 1)[0]
 
         self.assertEqual(json.loads(payload)["source"], "Bad </script> window")
+
+
+class GuardedHostSaveTests(unittest.TestCase):
+    def host(self, directory):
+        host = AnnotatorWindow.__new__(AnnotatorWindow)
+        host.directory = directory
+        host.document = load_document(directory)
+        host.saved_path = None
+        host.messages = []
+        host._to_page = host.messages.append
+        return host
+
+    def test_error_retains_loaded_baseline_and_never_reloads_entries(self):
+        with tempfile.TemporaryDirectory() as name:
+            directory = Path(name)
+            path = directory / "annotations.md"
+            path.write_text(render_annotation(annotation()))
+            host = self.host(directory)
+            baseline = host.document
+            external = render_annotation(annotation(comment="External note"))
+            path.write_text(external)
+            draft = entries_payload([annotation(comment="My draft")])
+            host._do_save({"entries": draft})
+            self.assertIs(host.document, baseline)
+            self.assertIsNone(host.saved_path)
+            self.assertEqual([message["kind"] for message in host.messages], ["error"])
+            self.assertIn("changed", host.messages[0]["status"])
+            self.assertEqual(path.read_text(), external)
+            self.assertEqual(draft[0]["comment"], "My draft")
+
+    def test_success_uses_returned_baseline_and_supports_repeated_save(self):
+        with tempfile.TemporaryDirectory() as name:
+            directory = Path(name)
+            host = self.host(directory)
+            with patch("desktop_annotator.webview.load_document", side_effect=AssertionError("Must not reload after save")):
+                host._do_save({"entries": entries_payload([annotation(comment="First")])})
+                self.assertEqual(host.document.raw_bytes, host.saved_path.read_bytes())
+                host._do_save({"entries": entries_payload([annotation(comment="Second")])})
+            self.assertEqual(host.document.entries[0].comment, "Second")
+            self.assertEqual(host.messages[-1]["saveProblem"], "")
+            self.assertEqual(host.messages[-1]["kind"], "entries")
+
+    def test_reload_reports_diagnostics_alongside_usable_entries(self):
+        with tempfile.TemporaryDirectory() as name:
+            directory = Path(name)
+            host = self.host(directory)
+            (directory / "annotations.md").write_text("Manual preamble\n" + render_annotation(annotation()))
+            host._reload_entries("Reloaded")
+            self.assertTrue(host.messages[-1]["saveProblem"])
+            self.assertEqual(host.messages[-1]["entries"][0]["quote"], "quoted")
+
+    def test_initial_state_reports_blocked_save(self):
+        state = build_state(candidates=[], source="Firefox", annotations=[annotation()], save_problem="Unsafe input")
+        self.assertEqual(state["saveProblem"], "Unsafe input")
+        self.assertEqual(len(state["entries"]), 1)
+
+    def test_sublime_opens_original_file_without_attempting_a_save(self):
+        with tempfile.TemporaryDirectory() as name:
+            host = self.host(Path(name))
+            host.window = type("Window", (), {"close": lambda self: None})()
+            with patch("desktop_annotator.webview._launch_sublime") as launch, patch("desktop_annotator.webview.save_edited_annotations", side_effect=AssertionError("Must not save")):
+                host._do_sublime({})
+            launch.assert_called_once_with(Path(name) / "annotations.md")
 
 
 if __name__ == "__main__":

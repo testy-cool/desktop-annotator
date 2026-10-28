@@ -6,8 +6,8 @@ from pathlib import Path
 
 from desktop_annotator.annotation import (
     Annotation,
-    load_annotation_list,
-    parse_annotation_list,
+    DocumentSnapshot,
+    load_document,
     parse_editable_body,
     render_editable_body,
 )
@@ -72,6 +72,18 @@ def _launch_sublime(path: Path) -> None:
         stderr=subprocess.DEVNULL,
         start_new_session=True,
     )
+
+
+def _open_list_in_sublime(window, path: Path) -> None:
+    saved = window._save_edits()
+    try:
+        _launch_sublime(path)
+    except OSError:
+        window.list_status.set_text("Could not launch Sublime Text with the subl command.")
+        return
+    # A failed save leaves the draft and its explanation in the annotator.
+    if saved:
+        window.close()
 
 
 def _insert_marked_text(buffer, text: str, separator: str):
@@ -381,6 +393,7 @@ def show_annotation_popup(
             save = Gtk.Button(label="Save edits")
             save.get_style_context().add_class("suggested-action")
             save.connect("clicked", self._save_edits)
+            self.list_save_button = save
             header.pack_start(save, False, False, 0)
             layout.pack_start(header, False, False, 0)
 
@@ -432,18 +445,27 @@ def show_annotation_popup(
                     source=annotation_source(candidate.label, source),
                     directory=directory,
                 )
-            except ValueError:
-                self.add_status.set_text("Write a comment before adding this entry.")
+            except (ValueError, OSError) as error:
+                self.add_status.set_text(str(error))
                 self.comment_view.grab_focus()
                 return
             _close_after_successful_add(self)
 
         def _reload_list(self):
+            try:
+                self.document = load_document(directory)
+            except OSError as error:
+                self.document = DocumentSnapshot(
+                    directory / "annotations.md", None, (), (f"Could not load annotations: {error}",)
+                )
+            self.list_save_button.set_sensitive(not self.document.problems)
+            if self.document.problems:
+                self.list_status.set_text(self.document.save_problem)
             buffer = self.list_view.get_buffer()
             buffer.set_text("")
             self.entry_marks = []
             self.row_marks = []
-            annotations = parse_annotation_list(load_annotation_list(directory))
+            annotations = self.document.entries
             if not annotations:
                 buffer.set_text("No annotations yet. Add one from the Add tab.")
                 self.list_view.set_editable(False)
@@ -493,10 +515,12 @@ def show_annotation_popup(
         def _save_edits(self, _button=None):
             try:
                 annotations = self._edited_annotations()
-            except ValueError:
-                self.list_status.set_text("Quotes and comments cannot be empty.")
+                document = save_edited_annotations(annotations, directory, expected=self.document)
+            except (ValueError, OSError) as error:
+                self.list_status.set_text(str(error))
                 return
-            self.saved_path = save_edited_annotations(annotations, directory)
+            self.document = document
+            self.saved_path = document.path
             self.list_status.set_text("Edits saved.")
             return True
 
@@ -513,14 +537,7 @@ def show_annotation_popup(
             self.list_status.set_text("Copied quotes and comments without timestamps.")
 
         def _open_in_sublime(self, _button=None):
-            if not self._save_edits():
-                return
-            try:
-                _launch_sublime(self.saved_path)
-            except OSError:
-                self.list_status.set_text("Could not launch Sublime Text with the subl command.")
-                return
-            self.close()
+            _open_list_in_sublime(self, directory / "annotations.md")
 
         def _on_key_press(self, _widget, event):
             if event.keyval == Gdk.KEY_Escape:
