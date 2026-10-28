@@ -242,6 +242,14 @@ function collectEdits() {
   for (const block of doc.querySelectorAll(".entry")) {
     const id = Number(block.dataset.id);
     const quotes = block.querySelectorAll(".q"), comments = block.querySelectorAll(".c");
+    // WebKit can leave an empty field shell after deleting a whole selection.
+    const hasBodyText = [...block.childNodes].some(node => {
+      if (node.nodeType === Node.ELEMENT_NODE && node.matches('.blame[contenteditable="false"]')) return false;
+      const text = node.nodeType === Node.ELEMENT_NODE && node.classList.contains("c")
+        ? node.innerText.replace(/^→\s*/, "") : node.textContent;
+      return text.trim();
+    });
+    if (block.hasAttribute("data-id") && renderedIds.has(id) && !hasBodyText) continue;
     if (!block.hasAttribute("data-id") || !renderedIds.has(id) || edits.has(id) ||
         quotes.length !== 1 || comments.length !== 1 ||
         quotes[0].parentElement !== block || comments[0].parentElement !== block) {
@@ -278,6 +286,18 @@ function updateSaveProblem(problem) {
 
 // Copy all includes hidden drafts; selection copy still follows the visible DOM.
 const plainText = list => list.map(e => e.quote + "\n→ " + e.comment).join("\n---\n");
+
+// Keep Enter inside its quote/comment instead of cloning the field block.
+doc.addEventListener("beforeinput", event => {
+  if (event.inputType !== "insertParagraph") return;
+  const selection = getSelection();
+  const node = selection.anchorNode;
+  const element = node && (node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement);
+  const field = element && element.closest(".q, .c");
+  if (!field || !doc.contains(field)) return;
+  event.preventDefault();
+  document.execCommand("insertLineBreak");
+});
 
 doc.addEventListener("input", () => setStatus("liststatus", "Unsaved edits.", false));
 $("filter").addEventListener("input", () => {

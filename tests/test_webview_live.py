@@ -52,8 +52,23 @@ with tempfile.TemporaryDirectory() as tmp:
     w.present()
     until(lambda: loaded)
     assert js("showPane('list'); return document.querySelectorAll('.entry').length") == 2
+    # Actual Enter must produce a multiline comment that remains saveable.
+    js("const c=document.querySelector('.c'); doc.focus(); const range=document.createRange(); range.selectNodeContents(c); range.collapse(false); const selection=getSelection();selection.removeAllRanges();selection.addRange(range); return true")
+    window=subprocess.run(['xdotool','search','--onlyvisible','--pid',str(os.getpid()),'--name','Annotate'],capture_output=True,text=True,check=True).stdout.splitlines()[0]
+    subprocess.run(['xdotool','windowactivate','--sync',window],check=True)
+    subprocess.run(['xdotool','key','Return'],check=True)
+    subprocess.run(['xdotool','type','--clearmodifiers','second line'],check=True)
+    until(lambda: js("return doc.textContent.includes('second line')"))
+    js("$('save').click(); return true")
+    until(lambda: 'second line' in (directory/'annotations.md').read_text())
+    assert parse_annotation_list((directory/'annotations.md').read_text())[-1].comment == 'newer comment\nsecond line'
+    until(lambda: js("return $('liststatus').textContent.includes('Saved')"))
     js("document.querySelector('.q').textContent='draft quote'; doc.dispatchEvent(new Event('input',{bubbles:true})); $('filter').value='older'; $('filter').dispatchEvent(new Event('input')); return true")
     assert js("return document.querySelectorAll('.entry').length") == 1
+    js("$('copyall').click(); return true")
+    clipboard=Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD)
+    until(lambda: 'draft quote' in (clipboard.wait_for_text() or ''))
+    assert 'older quote' in clipboard.wait_for_text()
     js("$('filter').value=''; $('filter').dispatchEvent(new Event('input')); return true")
     assert js("return document.querySelector('.q').innerText") == 'draft quote'
     # Searches use the edited draft, and hidden entries remain in a save.
@@ -66,7 +81,7 @@ with tempfile.TemporaryDirectory() as tmp:
     until(lambda: 'second edit' in (directory/'annotations.md').read_text())
     until(lambda: js("return $('liststatus').textContent.includes('Saved')"))
     # Deleting a filtered row cannot resurrect it when filter changes.
-    js("document.querySelector('.entry').remove(); doc.dispatchEvent(new Event('input',{bubbles:true})); $('filter').value=''; $('filter').dispatchEvent(new Event('input')); return true")
+    js("const range=document.createRange(); range.selectNode(document.querySelector('.entry')); doc.focus(); const selection=getSelection(); selection.removeAllRanges(); selection.addRange(range); document.execCommand('delete'); doc.dispatchEvent(new Event('input',{bubbles:true})); $('filter').value=''; $('filter').dispatchEvent(new Event('input')); return true")
     assert js("return document.querySelectorAll('.entry').length") == 1
     js("$('save').click(); return true")
     until(lambda: len(parse_annotation_list((directory/'annotations.md').read_text())) == 1)
@@ -92,6 +107,19 @@ with tempfile.TemporaryDirectory() as tmp:
     until(lambda: js("return /changed/i.test($('liststatus').textContent)"))
     assert (directory/'annotations.md').read_bytes() == external
     assert js("return document.querySelector('.q').innerText") == 'kept draft'
+    # Opening the external editor must retain this conflicting browser draft.
+    import desktop_annotator.webview as bridge
+    opened=[]
+    launch=bridge._launch_sublime
+    bridge._launch_sublime=lambda path: opened.append(path)
+    try:
+        js("$('sublime').click(); return true")
+        until(lambda: opened)
+        assert w.window.get_visible()
+        assert (directory/'annotations.md').read_bytes() == external
+        assert js("return document.querySelector('.q').innerText") == 'kept draft'
+    finally:
+        bridge._launch_sublime=launch
     js("$('revert').click(); return true")
     until(lambda: js("return document.querySelectorAll('.entry').length") == 2)
     # Native rendered checks on both panes at both supported sizes.
@@ -116,6 +144,22 @@ with tempfile.TemporaryDirectory() as tmp:
     js("showPane('add'); $('comment').value='added comment'; $('add').click(); return true")
     until(lambda: b'added comment' in (directory/'annotations.md').read_bytes())
     assert (directory/'annotations.md').read_bytes().startswith(before)
+# A malformed daily file must produce a usable diagnostic window, not a crash.
+with tempfile.TemporaryDirectory() as tmp:
+    directory=Path(tmp)
+    daily=directory/'2026-08-19.md'
+    daily.write_bytes(b'\xff')
+    w=AnnotatorWindow(candidates=[], source='Test', directory=directory, gtk=Gtk, gdk=Gdk, webkit=WebKit2, glib=GLib)
+    loaded=[]
+    w.view.connect('load-changed',lambda v,e: loaded.append(True) if e==WebKit2.LoadEvent.FINISHED else None)
+    w.present()
+    until(lambda: loaded)
+    assert js("return $('save').disabled")
+    assert js("return $('saveproblem').textContent.includes('Could not load annotations')")
+    assert daily.read_bytes()==b'\xff'
+    assert not (directory/'annotations.md').exists()
+    w.window.destroy()
+
 print('WebKit draft, save, conflict, malformed file and rendered checks passed')
 # Exercise the real executable, keyboard path and second-launch signal.
 processes = []
