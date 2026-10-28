@@ -39,6 +39,22 @@ note and the start of the next and copy exactly that. Filter with `Ctrl+F`,
 copy the selection with `Ctrl+C`, edit any note in place and press `Save edits`
 to write the file back.
 
+Edits stay in the list when you change its filter. `Copy all` copies every note,
+including edits hidden by the filter. Removing a whole visible note deletes
+that note when you save; notes hidden by the filter are kept.
+
+Saving is blocked if the file cannot be read safely, contains text the list
+cannot represent, or has changed outside the window. The list explains the
+problem and keeps your drafts available to copy. Copy them before using
+`Revert` to reload the file, or before closing and reopening it. For recovery,
+you can also reopen with `DESKTOP_ANNOTATOR_UI=gtk` and inspect the Markdown
+file in your editor. The external-edit guard is best effort: it detects changes
+before saving, but does not lock other editors or merge their changes.
+
+If editing removes a note's quote or comment structure, filtering and saving
+pause so your text stays on screen. Use `Ctrl+Z` to undo the edit, or select and
+copy the text before reverting.
+
 ![The list of saved notes](docs/list.png)
 
 ## Run it

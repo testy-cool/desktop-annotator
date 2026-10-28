@@ -119,6 +119,7 @@
       <button class="go ghost" id="copyall">Copy all</button>
     </div>
     <div id="doc" contenteditable spellcheck="false"></div>
+    <div id="saveproblem" class="save-problem" role="alert" hidden></div>
     <div class="foot">
       <span class="status" id="liststatus"></span>
       <span class="hint">drag to select · Ctrl+C</span>
@@ -190,14 +191,20 @@ $("add").onclick = addAnnotation;
 $("cancel").onclick = () => host({action:"close"});
 
 /* ---------- the list, as one document ---------- */
-let entries = S.entries.map((e, i) => ({...e, id:i}));
+let nextEntryId = 0;
+let entries = S.entries.map(e => ({...e, id:nextEntryId++}));
+let renderedIds = new Set();
+let appliedFilter = "";
+let saveProblem = S.saveProblem || "";
 const doc = $("doc");
 
 function renderDoc() {
   const q = $("filter").value.trim().toLowerCase();
+  appliedFilter = $("filter").value;
   const visible = entries.filter(e =>
     !q || e.quote.toLowerCase().includes(q) || e.comment.toLowerCase().includes(q)
          || e.source.toLowerCase().includes(q));
+  renderedIds = new Set(visible.map(e => e.id));
   $("shown").textContent = q ? visible.length + " of " + entries.length
                              : entries.length + (entries.length === 1 ? " entry" : " entries");
   $("title").textContent = "Annotate — " + entries.length +
@@ -218,34 +225,65 @@ function renderDoc() {
     </div>`).join('<div class="sep" contenteditable="false">---</div>');
 }
 
-/* What the document says now. Entries hidden by the filter pass through
-   untouched; a visible entry whose block was deleted is dropped. */
-function editedEntries() {
+/* The last rendered ids belong to this DOM, regardless of the new filter text.
+   Only their missing blocks are deletions; hidden drafts always pass through. */
+function collectEdits() {
   const edits = new Map();
-  doc.querySelectorAll(".entry").forEach(block => {
-    edits.set(+block.dataset.id, {
-      quote: block.querySelector(".q").innerText.replace(/\n$/, ""),
-      comment: block.querySelector(".c").innerText.replace(/\n$/, "").replace(/^→\s*/, ""),
+  const malformed = () => {
+    setStatus("liststatus", "An entry lost its quote or comment structure. Undo the edit (Ctrl+Z), or copy your text before Revert. Filtering and saving are paused.", false);
+    return false;
+  };
+  for (const node of doc.childNodes) {
+    if (node.nodeType === Node.ELEMENT_NODE &&
+        (node.classList.contains("entry") ||
+         (node.matches(".sep, .empty") && node.contentEditable === "false"))) continue;
+    if (node.textContent.trim()) return malformed();
+  }
+  for (const block of doc.querySelectorAll(".entry")) {
+    const id = Number(block.dataset.id);
+    const quotes = block.querySelectorAll(".q"), comments = block.querySelectorAll(".c");
+    if (!block.hasAttribute("data-id") || !renderedIds.has(id) || edits.has(id) ||
+        quotes.length !== 1 || comments.length !== 1 ||
+        quotes[0].parentElement !== block || comments[0].parentElement !== block) {
+      return malformed();
+    }
+    for (const node of block.childNodes) {
+      if (node === quotes[0] || node === comments[0] ||
+          (node.nodeType === Node.ELEMENT_NODE && node.classList.contains("blame") &&
+           node.contentEditable === "false")) continue;
+      if (node.textContent.trim()) return malformed();
+    }
+    edits.set(id, {
+      quote: quotes[0].innerText.replace(/\n$/, ""),
+      comment: comments[0].innerText.replace(/\n$/, "").replace(/^→\s*/, ""),
     });
-  });
-  const shown = new Set(entries.filter(isVisible).map(e => e.id));
-  return entries
-    .filter(e => edits.has(e.id) || !shown.has(e.id))
+  }
+  if ([...doc.querySelectorAll(".q, .c")].some(part =>
+      !part.parentElement.classList.contains("entry"))) {
+    return malformed();
+  }
+  entries = entries
+    .filter(e => edits.has(e.id) || !renderedIds.has(e.id))
     .map(e => edits.has(e.id) ? {...e, ...edits.get(e.id)} : e);
+  return true;
 }
 
-function isVisible(entry) {
-  const q = $("filter").value.trim().toLowerCase();
-  if (!q) return true;
-  return entry.quote.toLowerCase().includes(q) || entry.comment.toLowerCase().includes(q)
-      || entry.source.toLowerCase().includes(q);
+function updateSaveProblem(problem) {
+  saveProblem = problem || "";
+  $("save").disabled = !!saveProblem;
+  $("save").title = saveProblem;
+  $("saveproblem").hidden = !saveProblem;
+  $("saveproblem").textContent = saveProblem ? "Saving is blocked: " + saveProblem + " Copy your drafts before Revert or reopening the file." : "";
 }
 
-// Copy all must hand back exactly what dragging over everything would.
+// Copy all includes hidden drafts; selection copy still follows the visible DOM.
 const plainText = list => list.map(e => e.quote + "\n→ " + e.comment).join("\n---\n");
 
 doc.addEventListener("input", () => setStatus("liststatus", "Unsaved edits.", false));
-$("filter").addEventListener("input", renderDoc);
+$("filter").addEventListener("input", () => {
+  if (!collectEdits()) { $("filter").value = appliedFilter; return; }
+  renderDoc();
+});
 
 $("selectall").onclick = () => {
   const range = document.createRange();
@@ -257,13 +295,13 @@ $("selectall").onclick = () => {
   setStatus("liststatus", "Everything selected. Ctrl+C to copy.", true);
 };
 $("copyall").onclick = () => {
-  if (!entries.length) return;
-  host({action:"copy", text:plainText(editedEntries())});
+  if (!collectEdits() || !entries.length) return;
+  host({action:"copy", text:plainText(entries)});
   setStatus("liststatus", "All " + entries.length + " entries copied.", true);
 };
 $("save").onclick = () => {
-  const edited = editedEntries();
-  host({action:"save", entries:edited.map(e =>
+  if (saveProblem || !collectEdits()) return;
+  host({action:"save", entries:entries.map(e =>
     ({stamp:e.stamp, source:e.source, quote:e.quote, comment:e.comment}))});
 };
 $("revert").onclick = () => host({action:"revert"});
@@ -271,7 +309,8 @@ $("revert").onclick = () => host({action:"revert"});
 /* ---------- messages from the host ---------- */
 window.fromHost = msg => {
   if (msg.kind === "entries") {
-    entries = msg.entries.map((e, i) => ({...e, id:i}));
+    entries = msg.entries.map(e => ({...e, id:nextEntryId++}));
+    updateSaveProblem(msg.saveProblem);
     renderDoc();
     if (msg.status) setStatus("liststatus", msg.status, true);
   } else if (msg.kind === "error") {
@@ -296,6 +335,7 @@ addEventListener("keydown", e => {
   }
 });
 
+updateSaveProblem(saveProblem);
 renderDoc();
 showPane(S.entries.length && !S.candidates.length ? "list" : "add");
 </script>

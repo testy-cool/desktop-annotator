@@ -1,0 +1,187 @@
+"""Real WebKit/X11 regressions; each run uses its own virtual desktop and notes."""
+import os
+from pathlib import Path
+import select
+import shutil
+import subprocess
+import tempfile
+import unittest
+
+ROOT = Path(__file__).resolve().parents[1]
+
+SCRIPT = r'''
+import gi, json, time, tempfile, subprocess, os
+from pathlib import Path
+from datetime import datetime
+from desktop_annotator.annotation import Annotation, append_annotation, parse_annotation_list
+from desktop_annotator.webview import AnnotatorWindow
+from desktop_annotator.capture import TextCandidate
+
+gi.require_version("Gtk", "3.0")
+gi.require_version("Gdk", "3.0")
+gi.require_version("WebKit2", "4.1")
+from gi.repository import Gtk, Gdk, GLib, WebKit2
+
+def until(predicate):
+    deadline = time.monotonic() + 8
+    while time.monotonic() < deadline:
+        while GLib.MainContext.default().pending():
+            GLib.MainContext.default().iteration(False)
+        if predicate(): return
+        time.sleep(.01)
+    raise AssertionError("Timed out waiting for WebKit")
+
+def js(script):
+    result = []
+    errors = []
+    def done(view, task, _data):
+        try: result.append(json.loads(view.evaluate_javascript_finish(task).to_string()))
+        except Exception as error: errors.append(error)
+    w.view.evaluate_javascript("JSON.stringify((() => {" + script + "})())", -1, None, None, None, done, None)
+    until(lambda: result or errors)
+    if errors: raise errors[0]
+    return result[0]
+
+with tempfile.TemporaryDirectory() as tmp:
+    directory = Path(tmp)
+    append_annotation(Annotation("older quote", "older comment", "Older", datetime(2026,10,28,12,0)), directory)
+    append_annotation(Annotation("newer quote", "newer comment", "Newer", datetime(2026,10,28,12,1)), directory)
+    w = AnnotatorWindow(candidates=[TextCandidate("Selected text", "captured quote")], source="Test window", directory=directory, gtk=Gtk, gdk=Gdk, webkit=WebKit2, glib=GLib)
+    loaded = []
+    w.view.connect("load-changed", lambda v,e: loaded.append(True) if e == WebKit2.LoadEvent.FINISHED else None)
+    w.present()
+    until(lambda: loaded)
+    assert js("showPane('list'); return document.querySelectorAll('.entry').length") == 2
+    js("document.querySelector('.q').textContent='draft quote'; doc.dispatchEvent(new Event('input',{bubbles:true})); $('filter').value='older'; $('filter').dispatchEvent(new Event('input')); return true")
+    assert js("return document.querySelectorAll('.entry').length") == 1
+    js("$('filter').value=''; $('filter').dispatchEvent(new Event('input')); return true")
+    assert js("return document.querySelector('.q').innerText") == 'draft quote'
+    # Searches use the edited draft, and hidden entries remain in a save.
+    js("$('filter').value='draft'; $('filter').dispatchEvent(new Event('input')); $('save').click(); return true")
+    until(lambda: 'draft quote' in (directory/'annotations.md').read_text())
+    assert len(parse_annotation_list((directory/'annotations.md').read_text())) == 2
+    until(lambda: js("return $('liststatus').textContent.includes('Saved')"))
+    # Repeated save establishes a new baseline.
+    js("document.querySelector('.c').textContent='→ second edit'; doc.dispatchEvent(new Event('input',{bubbles:true})); $('save').click(); return true")
+    until(lambda: 'second edit' in (directory/'annotations.md').read_text())
+    until(lambda: js("return $('liststatus').textContent.includes('Saved')"))
+    # Deleting a filtered row cannot resurrect it when filter changes.
+    js("document.querySelector('.entry').remove(); doc.dispatchEvent(new Event('input',{bubbles:true})); $('filter').value=''; $('filter').dispatchEvent(new Event('input')); return true")
+    assert js("return document.querySelectorAll('.entry').length") == 1
+    js("$('save').click(); return true")
+    until(lambda: len(parse_annotation_list((directory/'annotations.md').read_text())) == 1)
+    until(lambda: js("return $('liststatus').textContent.includes('Saved')"))
+    # Malformed editable DOM must remain on screen and must not be saved.
+    original = (directory/'annotations.md').read_bytes()
+    js("document.querySelector('.c').remove(); doc.dispatchEvent(new Event('input',{bubbles:true})); $('filter').value='absent'; $('filter').dispatchEvent(new Event('input')); $('save').click(); return true")
+    assert js("return document.querySelectorAll('.entry').length") == 1
+    assert (directory/'annotations.md').read_bytes() == original
+    js("$('filter').value=''; $('revert').click(); return true")
+    until(lambda: js("return !!document.querySelector('.c')"))
+    # Unexpected text inside an entry cannot silently disappear on serialization.
+    js("document.querySelector('.entry').appendChild(document.createTextNode('orphaned draft text')); doc.dispatchEvent(new Event('input',{bubbles:true})); $('filter').value='missing'; $('filter').dispatchEvent(new Event('input')); $('save').click(); return true")
+    assert js("return doc.textContent.includes('orphaned draft text')")
+    assert (directory/'annotations.md').read_bytes() == original
+    js("$('filter').value=''; $('revert').click(); return true")
+    until(lambda: js("return !doc.textContent.includes('orphaned draft text')"))
+    # External edits reject the save while preserving the unsaved draft.
+    js("document.querySelector('.q').textContent='kept draft'; doc.dispatchEvent(new Event('input',{bubbles:true})); return true")
+    append_annotation(Annotation("external addition", "external comment", "External", datetime(2026,10,28,12,2)), directory)
+    external = (directory/'annotations.md').read_bytes()
+    js("$('save').click(); return true")
+    until(lambda: js("return /changed/i.test($('liststatus').textContent)"))
+    assert (directory/'annotations.md').read_bytes() == external
+    assert js("return document.querySelector('.q').innerText") == 'kept draft'
+    js("$('revert').click(); return true")
+    until(lambda: js("return document.querySelectorAll('.entry').length") == 2)
+    # Native rendered checks on both panes at both supported sizes.
+    for width,height in [(760,640),(640,560)]:
+        w.window.resize(width,height)
+        until(lambda: js("return innerWidth") == width)
+        widths=[]
+        for pane in ['add','list']:
+            data=js("showPane("+json.dumps(pane)+"); return {width:document.querySelector('.pane.on').getBoundingClientRect().width, small:[...document.querySelectorAll('*')].filter(e=>e.getClientRects().length && e.textContent.trim() && !['SCRIPT','STYLE'].includes(e.tagName) && parseFloat(getComputedStyle(e).fontSize)<12).map(e=>e.className), overflow:document.documentElement.scrollWidth>innerWidth}")
+            assert not data['small'], data
+            assert not data['overflow'], data
+            widths.append(data['width'])
+        assert widths[0] == widths[1], widths
+    # Unrecognized file content is visible as an error and saving is blocked.
+    (directory/'annotations.md').write_bytes(b'# Unrecognized preamble\n'+external)
+    js("$('revert').click(); return true")
+    until(lambda: js("return $('save').disabled"))
+    before=(directory/'annotations.md').read_bytes()
+    js("$('save').click(); return true")
+    assert (directory/'annotations.md').read_bytes()==before
+    # Appending still preserves unrecognized bytes and closes the actual window.
+    js("showPane('add'); $('comment').value='added comment'; $('add').click(); return true")
+    until(lambda: b'added comment' in (directory/'annotations.md').read_bytes())
+    assert (directory/'annotations.md').read_bytes().startswith(before)
+print('WebKit draft, save, conflict, malformed file and rendered checks passed')
+# Exercise the real executable, keyboard path and second-launch signal.
+processes = []
+try:
+    with tempfile.TemporaryDirectory() as tmp:
+        env = dict(os.environ, ANNOTATIONS_DIR=tmp)
+        env.pop('DESKTOP_ANNOTATOR_UI', None)
+        selection = subprocess.Popen(['xclip','-selection','primary','-in','-quiet'],env=env,stdin=subprocess.PIPE,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,text=True)
+        processes.append(selection)
+        selection.stdin.write('live selected quote')
+        selection.stdin.close()
+        def xdo(*args):
+            return subprocess.run(['xdotool',*args],env=env,capture_output=True,text=True,timeout=4).stdout.strip()
+        def launch():
+            app = subprocess.Popen(['/usr/bin/python3','annotate.py'],env=env,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+            processes.append(app)
+            found = []
+            def visible():
+                assert app.poll() is None, 'Application exited before showing window'
+                window=xdo('search','--onlyvisible','--pid',str(app.pid),'--name','Annotate')
+                if window: found.append(window.splitlines()[0])
+                return found
+            until(visible)
+            return app,found[0]
+        app,window=launch()
+        xdo('windowactivate','--sync',window)
+        assert xdo('getwindowfocus') == window
+        # Wait for the local HTML page to load and place focus in the comment.
+        time.sleep(.5)
+        xdo('type','--clearmodifiers','--delay','1','live keyboard comment')
+        xdo('key','--clearmodifiers','ctrl+Return')
+        assert app.wait(timeout=8) == 0
+        saved=parse_annotation_list((Path(tmp)/'annotations.md').read_text())
+        assert len(saved)==1 and saved[0].quote=='live selected quote' and saved[0].comment=='live keyboard comment', saved
+        app,window=launch()
+        second=subprocess.run(['/usr/bin/python3','annotate.py'],env=env,capture_output=True,text=True,timeout=8)
+        assert second.returncode == 0 and app.wait(timeout=8) == 0
+finally:
+    for process in reversed(processes):
+        if process.poll() is None:
+            process.terminate()
+            try: process.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
+print('Real capture, keyboard save and second-launch toggle passed')
+
+'''
+
+
+class LiveWebKitTests(unittest.TestCase):
+    @unittest.skipUnless(all(shutil.which(tool) for tool in ('Xvfb','metacity','xclip','xdotool')), 'Xvfb and metacity required')
+    def test_real_webkit_workflow(self):
+        server = subprocess.Popen(['Xvfb', '-displayfd', '1', '-screen', '0', '1400x900x24', '-nolisten', 'tcp'], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+        wm = None
+        try:
+            self.assertTrue(select.select([server.stdout], [], [], 5)[0], 'Xvfb startup timed out')
+            with tempfile.TemporaryDirectory() as runtime:
+                env = dict(os.environ, DISPLAY=':'+server.stdout.readline().strip(), GDK_BACKEND='x11', XDG_RUNTIME_DIR=runtime)
+                wm = subprocess.Popen(['metacity', '--sm-disable'], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                result = subprocess.run(['/usr/bin/python3', '-c', SCRIPT], cwd=ROOT, env=env, text=True, capture_output=True, timeout=65)
+                self.assertEqual(result.returncode, 0, result.stdout+'\n'+result.stderr)
+        finally:
+            if wm is not None:
+                wm.terminate()
+                wm.wait(timeout=5)
+            server.terminate()
+            server.wait(timeout=5)
+            server.stdout.close()
