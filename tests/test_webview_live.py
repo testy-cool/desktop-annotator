@@ -56,6 +56,7 @@ with tempfile.TemporaryDirectory() as tmp:
     assert js("return document.querySelector('label[for=quote]').textContent") == 'Quote'
     assert js("return document.querySelector('label[for=comment]').textContent") == 'Your note'
     assert not js("return !!$('chips').getClientRects().length")
+    assert not js("return !!$('chips').parentElement.getClientRects().length")
     # A cleared quote must retain a caret target after filtering and be repairable.
     js("showPane('list'); const q=document.querySelector('.q'); doc.focus(); const range=document.createRange(); range.selectNodeContents(q); const selection=getSelection(); selection.removeAllRanges(); selection.addRange(range); document.execCommand('delete'); $('filter').value='newer'; $('filter').dispatchEvent(new Event('input')); $('filter').value=''; $('filter').dispatchEvent(new Event('input')); return true")
     assert js("return document.querySelector('.q').getBoundingClientRect().height") > 0
