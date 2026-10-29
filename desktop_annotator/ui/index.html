@@ -55,7 +55,7 @@
   .close-warning[hidden]{display:none}
   .close-warning p{margin:0 0 8px;font-size:13px}
   .close-actions{display:flex;gap:8px;flex-wrap:wrap}
-  .edited{margin-left:8px;color:var(--text)}
+  .edited{margin-left:8px;color:var(--text);flex:none}
   .hint{font-size:13px;color:var(--dim);white-space:nowrap}
   .go{font-size:14px;padding:6px 14px;border:1px solid var(--line2);background:#2a2a2a;
       color:var(--text);cursor:pointer;font-family:inherit;white-space:nowrap}
@@ -77,8 +77,9 @@
   .entry.a{background:#202020}
   .entry.b{background:#262626}
   /* dim reference line, like a blame annotation: shown, never copied, never edited */
-  .blame{font-size:13px;color:var(--faint);margin-bottom:5px;user-select:none;
+  .blame{display:flex;align-items:baseline;font-size:13px;color:var(--faint);margin-bottom:5px;user-select:none;
          -webkit-user-select:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .blame-reference{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .q{min-height:1.5em;color:#b0b0b0;white-space:pre-wrap;overflow-wrap:anywhere}
   .c{color:var(--text);white-space:pre-wrap;overflow-wrap:anywhere;margin-top:2px}
   .sep{color:var(--faint);font-size:13px;padding:0 14px;line-height:1.5;background:#1d1d1d}
@@ -116,9 +117,8 @@
     </div>
     <div class="pick">
       <span id="chips" style="display:flex;gap:6px"></span>
-      <span class="count" style="margin-left:auto" id="chars"></span>
     </div>
-    <div class="field-head"><label for="quote">Quote</label></div>
+    <div class="field-head"><label for="quote">Quote</label><span class="count" style="margin-left:auto" id="chars"></span></div>
     <textarea id="quote" spellcheck="false"></textarea>
     <div class="field-head">
       <label for="comment">Your note</label>
@@ -249,6 +249,7 @@ function resizeQuote() {
   $("quote").style.height = Math.min(180, Math.max(80, $("quote").scrollHeight + 2)) + "px";
 }
 $("quote").addEventListener("input", () => { countChars(); resizeQuote(); });
+$("chips").parentElement.hidden = S.candidates.length <= 1;
 $("chips").hidden = S.candidates.length <= 1;
 if (S.candidates.length <= 1) $("chips").style.display = "none";
 
@@ -320,7 +321,7 @@ function renderDoc() {
                                      "<mark>$1</mark>") : esc(s);
   doc.innerHTML = visible.map((e, i) => `
     <div class="entry ${i % 2 ? "b" : "a"}" data-id="${e.id}">
-      <div class="blame" contenteditable="false">${esc(e.stamp)} · ${esc(e.source)}<span class="edited" hidden>edited</span></div>
+      <div class="blame" contenteditable="false"><span class="blame-reference">${esc(e.stamp)} · ${esc(e.source)}</span><span class="edited" hidden>edited</span></div>
       <div class="q">${hi(e.quote)}</div>
       <div class="c">→ ${hi(e.comment)}</div>
     </div>`).join('<div class="sep" contenteditable="false">---</div>');
@@ -460,7 +461,7 @@ window.fromHost = msg => {
 /* ---------- keys ---------- */
 const listOpen = () => $("pane-list").classList.contains("on");
 addEventListener("keydown", e => {
-  if (e.key === "Escape") { e.preventDefault(); requestClose("escape"); return; }
+  if (e.key === "Escape") { e.preventDefault(); if (!e.repeat) requestClose("escape"); return; }
   if (!e.ctrlKey) return;
   const k = e.key.toLowerCase();
   if (k === "enter") { e.preventDefault(); listOpen() ? $("save").click() : addAnnotation(); }

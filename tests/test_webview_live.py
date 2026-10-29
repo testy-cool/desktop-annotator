@@ -94,6 +94,12 @@ with tempfile.TemporaryDirectory() as tmp:
     assert 'older quote' in clipboard.wait_for_text()
     js("$('filter').value=''; $('filter').dispatchEvent(new Event('input')); return true")
     assert js("return document.querySelector('.q').innerText") == 'draft quote'
+    # Long source names cannot clip the per-entry edited marker.
+    source=js("return entries[0].source")
+    js("entries[0].source='Long browser title '.repeat(20); renderDoc(); return true")
+    bounds=js("const marker=document.querySelector('.edited'); const line=marker.parentElement.getBoundingClientRect(); const r=marker.getBoundingClientRect(); return {visible:!marker.hidden,width:r.width,right:r.right,lineRight:line.right}")
+    assert bounds['visible'] and bounds['width'] > 0 and bounds['right'] <= bounds['lineRight'], bounds
+    js("entries[0].source="+json.dumps(source)+"; renderDoc(); return true")
     # Searches use the edited draft, and hidden entries remain in a save.
     js("$('filter').value='draft'; $('filter').dispatchEvent(new Event('input')); $('save').click(); return true")
     until(lambda: 'draft quote' in (directory/'annotations.md').read_text())
@@ -209,6 +215,8 @@ with tempfile.TemporaryDirectory() as tmp:
     js("$('keep-editing').click(); dispatchEvent(new KeyboardEvent('keydown',{key:'Escape'})); return true")
     until(lambda: js("return !$('close-warning').hidden"))
     assert not closed
+    js("dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',repeat:true})); return true")
+    assert not closed, 'Holding Escape must not confirm discarding'
     js("$('comment').value+=' edit'; $('comment').dispatchEvent(new Event('input')); dispatchEvent(new KeyboardEvent('keydown',{key:'Escape'})); return true")
     assert not closed
     assert js("return !$('close-warning').hidden")
@@ -265,7 +273,7 @@ try:
         assert second.returncode == 0
         time.sleep(.2)
         assert app.poll() is None, 'First toggle discarded a dirty note'
-        # Typing after the warning disarms its repeat-to-discard shortcut.
+        # Shortcut and Escape warnings arm independently; only a matching repeat discards.
         xdo('key','Escape')
         time.sleep(.1)
         assert app.poll() is None

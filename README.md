@@ -81,7 +81,10 @@ ln -s "$PWD/annotate.py" ~/.local/bin/desktop-annotator
 ```
 
 Pressing the shortcut again closes an open window instead of opening a second
-one. If either tab has unsaved work, closing first shows a warning with
+one. If two monitors are connected the window opens on the one to the right of
+your mouse, so it does not cover what you are reading.
+
+If either tab has unsaved work, closing first shows a warning with
 `Keep editing` and `Discard and close`. A second `Esc` or a second press of the
 launcher shortcut discards only after its own warning and before any further
 typing. The close button, Cancel, and the native window close always need an
@@ -90,8 +93,7 @@ explicit `Discard and close` when work is unsaved.
 A captured quote alone is not an unsaved draft. Changing that quote or typing a
 note makes the Add tab unsaved. `Ctrl+Enter` saves only the current tab. If the
 List tab has unsaved edits, adding a note takes you there first to save or revert
-those edits; your Add draft is kept. If two monitors are connected the window opens on the one to the right of
-your mouse, so it does not cover what you are reading.
+those edits; your Add draft is kept.
 
 ## Shortcuts
 
