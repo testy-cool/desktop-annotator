@@ -52,6 +52,11 @@ with tempfile.TemporaryDirectory() as tmp:
     w.present()
     until(lambda: loaded)
     assert js("showPane('list'); return document.querySelectorAll('.entry').length") == 2
+    # A cleared quote must retain a caret target after filtering and be repairable.
+    js("showPane('list'); const q=document.querySelector('.q'); doc.focus(); const range=document.createRange(); range.selectNodeContents(q); const selection=getSelection(); selection.removeAllRanges(); selection.addRange(range); document.execCommand('delete'); $('filter').value='newer'; $('filter').dispatchEvent(new Event('input')); $('filter').value=''; $('filter').dispatchEvent(new Event('input')); return true")
+    assert js("return document.querySelector('.q').getBoundingClientRect().height") > 0
+    js("const q=document.querySelector('.q'); doc.focus(); const range=document.createRange(); range.selectNodeContents(q); const selection=getSelection(); selection.removeAllRanges(); selection.addRange(range); document.execCommand('insertText',false,'newer quote'); return true")
+    assert js("return document.querySelector('.q').innerText") == 'newer quote'
     # Actual Enter must produce a multiline comment that remains saveable.
     js("const c=document.querySelector('.c'); doc.focus(); const range=document.createRange(); range.selectNodeContents(c); range.collapse(false); const selection=getSelection();selection.removeAllRanges();selection.addRange(range); return true")
     window=subprocess.run(['xdotool','search','--onlyvisible','--pid',str(os.getpid()),'--name','Annotate'],capture_output=True,text=True,check=True).stdout.splitlines()[0]
