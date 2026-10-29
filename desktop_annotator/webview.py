@@ -115,6 +115,9 @@ class AnnotatorWindow:
         self.source = source
         self.directory = directory
         self.saved_path: Path | None = None
+        self._close_allowed = False
+        self._page_ready = False
+        self._pending_close_reason: str | None = None
 
         self.window = gtk.Window(title="Annotate")
         self.window.set_default_size(WINDOW_WIDTH, WINDOW_HEIGHT)
@@ -122,12 +125,14 @@ class AnnotatorWindow:
         self.window.set_decorated(False)
         self.window.set_skip_taskbar_hint(False)
         self.window.connect("destroy", gtk.main_quit)
+        self.window.connect("delete-event", self._on_delete_event)
 
         manager = webkit.UserContentManager()
         manager.register_script_message_handler("host")
         manager.connect("script-message-received::host", self._on_message)
 
         self.view = webkit.WebView.new_with_user_content_manager(manager)
+        self.view.connect("load-changed", self._on_load_changed)
         self.view.set_background_color(self._rgba(0.11, 0.11, 0.11, 1.0))
         settings = self.view.get_settings()
         settings.set_enable_developer_extras(bool(os.environ.get("ANNOTATOR_DEVTOOLS")))
@@ -157,6 +162,29 @@ class AnnotatorWindow:
         script = f"window.fromHost({json.dumps(message)})"
         self.view.evaluate_javascript(script, -1, None, None, None, None, None)
 
+    def request_close(self, reason: str = "window") -> bool:
+        """Let the page protect its drafts, including requests made during load."""
+        if self._page_ready:
+            self._to_page({"kind": "requestClose", "reason": reason})
+        else:
+            self._pending_close_reason = reason
+        return False  # A GLib idle callback must run only once.
+
+    def _on_load_changed(self, _view, event) -> None:
+        if event != self.WebKit2.LoadEvent.FINISHED:
+            return
+        self._page_ready = True
+        reason = self._pending_close_reason
+        self._pending_close_reason = None
+        if reason is not None:
+            self.request_close(reason)
+
+    def _on_delete_event(self, _window, _event) -> bool:
+        if self._close_allowed:
+            return False
+        self.request_close("window")
+        return True
+
     def _reload_entries(self, status: str) -> None:
         try:
             document = load_document(self.directory)
@@ -182,6 +210,7 @@ class AnnotatorWindow:
             handler(message)
 
     def _do_close(self, _message) -> None:
+        self._close_allowed = True
         self.window.close()
 
     def _do_minimise(self, _message) -> None:
@@ -218,7 +247,7 @@ class AnnotatorWindow:
         except (ValueError, OSError) as error:
             self._to_page({"kind": "error", "pane": "add", "status": str(error)})
             return
-        self.window.close()
+        self._do_close({})
 
     def _do_save(self, message) -> None:
         try:
@@ -296,7 +325,7 @@ def show_annotation_popup(
         def request_close():
             nonlocal closed
             closed = True
-            GLib.idle_add(window.window.close)
+            GLib.idle_add(window.request_close, "shortcut")
 
         toggle_instance.set_toggle_callback(request_close)
         if closed:

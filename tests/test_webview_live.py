@@ -52,6 +52,11 @@ with tempfile.TemporaryDirectory() as tmp:
     w.present()
     until(lambda: loaded)
     assert js("showPane('list'); return document.querySelectorAll('.entry').length") == 2
+    assert not js("return $('save').classList.contains('primary')")
+    assert js("return document.querySelector('label[for=quote]').textContent") == 'Quote'
+    assert js("return document.querySelector('label[for=comment]').textContent") == 'Your note'
+    assert not js("return !!$('chips').getClientRects().length")
+    assert not js("return !!$('chips').parentElement.getClientRects().length")
     # A cleared quote must retain a caret target after filtering and be repairable.
     js("showPane('list'); const q=document.querySelector('.q'); doc.focus(); const range=document.createRange(); range.selectNodeContents(q); const selection=getSelection(); selection.removeAllRanges(); selection.addRange(range); document.execCommand('delete'); $('filter').value='newer'; $('filter').dispatchEvent(new Event('input')); $('filter').value=''; $('filter').dispatchEvent(new Event('input')); return true")
     assert js("return document.querySelector('.q').getBoundingClientRect().height") > 0
@@ -70,12 +75,32 @@ with tempfile.TemporaryDirectory() as tmp:
     until(lambda: js("return $('liststatus').textContent.includes('Saved')"))
     js("document.querySelector('.q').textContent='draft quote'; doc.dispatchEvent(new Event('input',{bubbles:true})); $('filter').value='older'; $('filter').dispatchEvent(new Event('input')); return true")
     assert js("return document.querySelectorAll('.entry').length") == 1
+    assert js("return $('save').classList.contains('primary')")
+    assert js("return $('shown').textContent.includes('edited')")
+    # Guard all closure paths while this hidden draft exists.
+    w.request_close('window')
+    until(lambda: js("return !$('close-warning').hidden"))
+    assert w.window.get_visible()
+    js("$('keep-editing').click(); return true")
+    assert js("return $('close-warning').hidden")
+    # Adding a different note cannot silently close and lose list edits.
+    before_add=(directory/'annotations.md').read_bytes()
+    js("showPane('add'); $('comment').value='pending new note'; $('comment').dispatchEvent(new Event('input')); $('add').click(); return true")
+    assert (directory/'annotations.md').read_bytes() == before_add
+    assert js("return $('pane-list').classList.contains('on')")
+    assert js("return $('comment').value") == 'pending new note'
     js("$('copyall').click(); return true")
     clipboard=Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD)
     until(lambda: 'draft quote' in (clipboard.wait_for_text() or ''))
     assert 'older quote' in clipboard.wait_for_text()
     js("$('filter').value=''; $('filter').dispatchEvent(new Event('input')); return true")
     assert js("return document.querySelector('.q').innerText") == 'draft quote'
+    # Long source names cannot clip the per-entry edited marker.
+    source=js("return entries[0].source")
+    js("entries[0].source='Long browser title '.repeat(20); renderDoc(); return true")
+    bounds=js("const marker=document.querySelector('.edited'); const line=marker.parentElement.getBoundingClientRect(); const r=marker.getBoundingClientRect(); return {visible:!marker.hidden,width:r.width,right:r.right,lineRight:line.right}")
+    assert bounds['visible'] and bounds['width'] > 0 and bounds['right'] <= bounds['lineRight'], bounds
+    js("entries[0].source="+json.dumps(source)+"; renderDoc(); return true")
     # Searches use the edited draft, and hidden entries remain in a save.
     js("$('filter').value='draft'; $('filter').dispatchEvent(new Event('input')); $('save').click(); return true")
     until(lambda: 'draft quote' in (directory/'annotations.md').read_text())
@@ -85,6 +110,13 @@ with tempfile.TemporaryDirectory() as tmp:
     js("document.querySelector('.c').textContent='→ second edit'; doc.dispatchEvent(new Event('input',{bubbles:true})); $('save').click(); return true")
     until(lambda: 'second edit' in (directory/'annotations.md').read_text())
     until(lambda: js("return $('liststatus').textContent.includes('Saved')"))
+    # Native Undo must restore a deleted stable entry and clear dirty state.
+    js("const range=document.createRange(); range.selectNode(document.querySelector('.entry')); doc.focus(); const selection=getSelection(); selection.removeAllRanges(); selection.addRange(range); document.execCommand('delete'); return true")
+    assert js("return $('shown').textContent.includes('deleted')")
+    js("document.execCommand('undo'); return true")
+    assert js("return entries.length") == 2
+    assert js("return document.querySelector('.q').innerText") == 'draft quote'
+    assert not js("return $('save').classList.contains('primary')")
     # Deleting a filtered row cannot resurrect it when filter changes.
     js("const range=document.createRange(); range.selectNode(document.querySelector('.entry')); doc.focus(); const selection=getSelection(); selection.removeAllRanges(); selection.addRange(range); document.execCommand('delete'); doc.dispatchEvent(new Event('input',{bubbles:true})); $('filter').value=''; $('filter').dispatchEvent(new Event('input')); return true")
     assert js("return document.querySelectorAll('.entry').length") == 1
@@ -165,6 +197,38 @@ with tempfile.TemporaryDirectory() as tmp:
     assert not (directory/'annotations.md').exists()
     w.window.destroy()
 
+# Dirty native close requests warn; editing disarms repeated-discard shortcuts.
+with tempfile.TemporaryDirectory() as tmp:
+    directory=Path(tmp)
+    w=AnnotatorWindow(candidates=[TextCandidate('Selected text','Captured')],source='Test',directory=directory,gtk=Gtk,gdk=Gdk,webkit=WebKit2,glib=GLib)
+    loaded=[];closed=[]
+    w.view.connect('load-changed',lambda v,e: loaded.append(True) if e==WebKit2.LoadEvent.FINISHED else None)
+    w.window.connect('destroy',lambda *_: closed.append(True))
+    w.present();until(lambda: loaded)
+    js("$('comment').value='Unsaved note'; $('comment').dispatchEvent(new Event('input')); return true")
+    w.window.close()
+    until(lambda: js("return !$('close-warning').hidden"))
+    assert not closed
+    assert js("return $('comment').value") == 'Unsaved note'
+    # Repeated pointer close/cancel still requires the explicit discard control.
+    js("$('close').click(); $('close').click(); $('cancel').click(); return true")
+    assert not closed
+    js("$('keep-editing').click(); dispatchEvent(new KeyboardEvent('keydown',{key:'Escape'})); return true")
+    until(lambda: js("return !$('close-warning').hidden"))
+    assert not closed
+    js("dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',repeat:true})); return true")
+    assert not closed, 'Holding Escape must not confirm discarding'
+    js("$('comment').value+=' edit'; $('comment').dispatchEvent(new Event('input')); dispatchEvent(new KeyboardEvent('keydown',{key:'Escape'})); return true")
+    assert not closed
+    assert js("return !$('close-warning').hidden")
+    js("$('keep-editing').click(); return true")
+    w.request_close('shortcut')
+    until(lambda: js("return !$('close-warning').hidden"))
+    assert not closed
+    w.request_close('shortcut')
+    until(lambda: closed)
+    assert not (directory/'annotations.md').exists()
+
 print('WebKit draft, save, conflict, malformed file and rendered checks passed')
 # Exercise the real executable, keyboard path and second-launch signal.
 processes = []
@@ -202,6 +266,21 @@ try:
         app,window=launch()
         second=subprocess.run(['/usr/bin/python3','annotate.py'],env=env,capture_output=True,text=True,timeout=8)
         assert second.returncode == 0 and app.wait(timeout=8) == 0
+        app,window=launch()
+        xdo('windowactivate','--sync',window)
+        time.sleep(.5)
+        xdo('type','--clearmodifiers','unsaved keyboard note')
+        second=subprocess.run(['/usr/bin/python3','annotate.py'],env=env,capture_output=True,text=True,timeout=8)
+        assert second.returncode == 0
+        time.sleep(.2)
+        assert app.poll() is None, 'First toggle discarded a dirty note'
+        # Shortcut and Escape warnings arm independently; only a matching repeat discards.
+        xdo('key','Escape')
+        time.sleep(.1)
+        assert app.poll() is None
+        xdo('key','Escape')
+        assert app.wait(timeout=8) == 0
+        assert len(parse_annotation_list((Path(tmp)/'annotations.md').read_text())) == 1
 finally:
     for process in reversed(processes):
         if process.poll() is None:

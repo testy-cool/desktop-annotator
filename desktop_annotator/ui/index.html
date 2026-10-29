@@ -4,7 +4,7 @@
 <style>
   :root{
     --card:#1c1c1c; --panel:#232323; --line:#303030; --line2:#3a3a3a;
-    --text:#e6e6e6; --dim:#8a8a8a; --faint:#6a6a6a;
+    --text:#e6e6e6; --dim:#b0b0b0; --faint:#9a9a9a;
     --accent:#7aa2f7; --danger:#d08a70; --ok:#7ab88a;
   }
   *{box-sizing:border-box}
@@ -14,7 +14,7 @@
   .win{height:100%;display:flex;flex-direction:column;border:1px solid var(--line2)}
   .bar{display:flex;align-items:center;gap:8px;padding:0 4px 0 12px;height:34px;flex:none;
        background:#1a1a1a;border-bottom:1px solid var(--line);user-select:none}
-  .bar .t{font-size:12px;color:var(--dim);flex:1;white-space:nowrap;overflow:hidden;
+  .bar .t{font-size:13px;color:var(--dim);flex:1;white-space:nowrap;overflow:hidden;
           text-overflow:ellipsis;cursor:move}
   .btn{width:30px;height:26px;display:grid;place-items:center;border:0;background:transparent;
        color:var(--dim);font-size:15px;cursor:pointer;border-radius:2px;font-family:inherit}
@@ -26,38 +26,48 @@
        border:0;background:transparent}
   .tab:hover{color:var(--text)}
   .tab.on{color:var(--text);background:#303030}
-  .tab .k{color:var(--dim);font-size:12px;margin-left:6px}
-  .pane{flex:1;min-height:0;min-width:0;width:100%;padding:14px;display:none;flex-direction:column;gap:10px}
+  .tab .k{color:var(--dim);font-size:13px;margin-left:6px}
+  .pane{flex:1;min-height:0;min-width:0;width:100%;padding:14px;display:none;flex-direction:column;gap:6px;overflow:auto}
   .pane.on{display:flex}
-  .meta{display:flex;gap:10px;align-items:baseline;font-size:12px;color:var(--dim)}
+  .meta{display:flex;gap:10px;align-items:baseline;font-size:13px;color:var(--dim)}
   .meta .src{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .meta .stamp{margin-left:auto;color:var(--faint);font-size:12px;white-space:nowrap}
+  .meta .stamp{margin-left:auto;color:var(--faint);font-size:13px;white-space:nowrap}
   .pick{display:flex;gap:6px;align-items:center;flex:none}
+  .pick[hidden]{display:none}
   #chips{min-width:0;flex-wrap:wrap}
   .chip{font-size:14px;padding:3px 10px;border:1px solid var(--line);background:transparent;
         color:var(--faint);cursor:pointer;font-family:inherit}
   .chip.on{background:#303030;border-color:#5a5a5a;color:var(--text)}
-  .count{font-size:12px;color:var(--faint);white-space:nowrap}
+  .count{font-size:13px;color:var(--faint);white-space:nowrap}
   textarea,input{font-family:inherit;color:var(--text);background:var(--panel);
                  border:1px solid var(--line);outline:none}
   textarea{padding:10px 12px;font-size:13px;line-height:1.5;resize:none}
   textarea:focus,input:focus{border-color:var(--accent)}
-  #quote{flex:1 1 auto;min-height:96px;max-height:42%;color:#cfcfcf}
-  #comment{flex:1 1 auto;min-height:88px;border-color:var(--accent)}
-  .foot{display:flex;align-items:center;gap:8px;flex:none;user-select:none}
-  .status{font-size:12px;color:var(--danger);flex:1;min-width:0;overflow-wrap:anywhere}
+  #quote{flex:none;height:80px;min-height:80px;max-height:180px;color:#b0b0b0}
+  #comment{flex:1 1 auto;min-height:64px}
+  .field-head{display:flex;align-items:baseline;gap:12px;flex:none;flex-wrap:wrap}
+  .field-head label{font-size:13px;color:var(--dim)}
+  .foot{display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex:none;user-select:none}
+  .status{font-size:13px;color:var(--dim);flex:1;min-width:0;overflow-wrap:anywhere}
   .status.ok{color:var(--ok)}
-  .hint{font-size:12px;color:var(--dim);white-space:nowrap}
+  .status.error{color:var(--danger)}
+  .button-key{font-size:12px;color:inherit;opacity:.85;margin-left:8px}
+  .close-warning{padding:10px 14px;background:#292929;flex:none}
+  .close-warning[hidden]{display:none}
+  .close-warning p{margin:0 0 8px;font-size:13px}
+  .close-actions{display:flex;gap:8px;flex-wrap:wrap}
+  .edited{margin-left:8px;color:var(--text);flex:none}
+  .hint{font-size:13px;color:var(--dim);white-space:nowrap}
   .go{font-size:14px;padding:6px 14px;border:1px solid var(--line2);background:#2a2a2a;
       color:var(--text);cursor:pointer;font-family:inherit;white-space:nowrap}
   .go:hover{background:#343434}
   .go.primary{background:#2f4a7a;border-color:#3d5f96}
   .go.primary:hover{background:#37568c}
   .go:disabled{opacity:.55;cursor:not-allowed}
-  .save-problem{font-size:12px;color:var(--danger);overflow-wrap:anywhere;flex:none}
+  .save-problem{font-size:13px;color:var(--danger);overflow-wrap:anywhere;flex:none}
   .go.ghost{background:transparent;color:var(--dim);border-color:transparent}
   .go.ghost:hover{background:#252525;color:var(--text)}
-  .search{display:flex;gap:8px;align-items:center;flex:none;user-select:none}
+  .search{display:flex;gap:8px;align-items:center;flex-wrap:wrap;flex:none;user-select:none}
   .search input{flex:1;min-width:0;padding:6px 10px;font-size:14px}
 
   /* one continuous document: drag anywhere, select across as many entries as you like */
@@ -68,12 +78,13 @@
   .entry.a{background:#202020}
   .entry.b{background:#262626}
   /* dim reference line, like a blame annotation: shown, never copied, never edited */
-  .blame{font-size:12px;color:var(--faint);margin-bottom:5px;user-select:none;
+  .blame{display:flex;align-items:baseline;font-size:13px;color:var(--faint);margin-bottom:5px;user-select:none;
          -webkit-user-select:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .q{min-height:1.5em;color:#cfcfcf;white-space:pre-wrap;overflow-wrap:anywhere}
+  .blame-reference{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .q{min-height:1.5em;color:#b0b0b0;white-space:pre-wrap;overflow-wrap:anywhere}
   .c{color:var(--text);white-space:pre-wrap;overflow-wrap:anywhere;margin-top:2px}
-  .sep{color:var(--faint);font-size:13px;padding:0 14px;line-height:2.1;background:#1d1d1d}
-  .empty{padding:22px 14px;color:var(--faint);font-size:12px;user-select:none}
+  .sep{color:var(--faint);font-size:13px;padding:0 14px;line-height:1.5;background:#1d1d1d}
+  .empty{padding:22px 14px;color:var(--faint);font-size:13px;user-select:none}
   mark{background:#3a3a1a;color:#e8e0a0;padding:0 2px}
   .grip{position:fixed;right:0;bottom:0;width:16px;height:16px;cursor:nwse-resize;z-index:5;
         background:repeating-linear-gradient(135deg,transparent,transparent 2px,#4a4a4a 2px,#4a4a4a 3px)}
@@ -89,7 +100,15 @@
 
   <div class="tabs">
     <button class="tab on" data-pane="add">Add<span class="k">Ctrl+1</span></button>
-    <button class="tab" data-pane="list">List<span class="k">Ctrl+L</span></button>
+    <button class="tab" data-pane="list">List<span class="k">Ctrl+2</span></button>
+  </div>
+
+  <div id="close-warning" class="close-warning" role="alert" hidden>
+    <p id="close-message"></p>
+    <div class="close-actions">
+      <button class="go" id="keep-editing">Keep editing</button>
+      <button class="go" id="discard-close">Discard and close</button>
+    </div>
   </div>
 
   <div class="pane on" id="pane-add">
@@ -99,15 +118,18 @@
     </div>
     <div class="pick">
       <span id="chips" style="display:flex;gap:6px"></span>
-      <span class="count" style="margin-left:auto" id="chars"></span>
     </div>
+    <div class="field-head"><label for="quote">Quote</label><span class="count" style="margin-left:auto" id="chars"></span></div>
     <textarea id="quote" spellcheck="false"></textarea>
-    <textarea id="comment" placeholder="comment"></textarea>
+    <div class="field-head">
+      <label for="comment">Your note</label>
+      <span class="status" id="addstatus" role="status"></span>
+    </div>
+    <textarea id="comment" placeholder="Write your note…"></textarea>
     <div class="foot">
-      <span class="status" id="addstatus"></span>
-      <span class="hint">Ctrl+Enter</span>
-      <button class="go ghost" id="cancel">Cancel</button>
-      <button class="go primary" id="add">Add annotation</button>
+      <span style="flex:1"></span>
+      <button class="go ghost" id="cancel">Cancel<span class="button-key">Esc</span></button>
+      <button class="go primary" id="add">Add annotation<span class="button-key">Ctrl+Enter</span></button>
     </div>
   </div>
 
@@ -122,9 +144,8 @@
     <div id="saveproblem" class="save-problem" role="alert" hidden></div>
     <div class="foot">
       <span class="status" id="liststatus"></span>
-      <span class="hint">drag to select · Ctrl+C</span>
       <button class="go ghost" id="revert">Revert</button>
-      <button class="go primary" id="save">Save edits</button>
+      <button class="go" id="save">Save edits<span class="button-key">Ctrl+Enter</span></button>
     </div>
   </div>
 </div>
@@ -136,14 +157,77 @@ const host = m => window.webkit.messageHandlers.host.postMessage(JSON.stringify(
 const $ = id => document.getElementById(id);
 const esc = s => s.replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
 
-function setStatus(id, text, ok) {
+function setStatus(id, text, ok, error = false) {
   const el = $(id);
   el.textContent = text;
   el.classList.toggle("ok", !!ok);
+  el.classList.toggle("error", !!error);
 }
 
+let closeReason = null;
+function disarmClose() {
+  closeReason = null;
+  $("close-warning").hidden = true;
+}
+function addDirty() {
+  return $("comment").value.length > 0 ||
+    $("quote").value !== ((S.candidates[candidate] || {}).text || "");
+}
+function entryEdited(entry) {
+  const saved = baseline.get(entry.id);
+  return !saved || entry.quote !== saved.quote || entry.comment !== saved.comment;
+}
+function dirtyCounts() {
+  const ids = new Set(entries.map(e => e.id));
+  return {edited:entries.filter(entryEdited).length,
+          deleted:[...baseline.keys()].filter(id => !ids.has(id)).length};
+}
+function listDirty() {
+  const counts = dirtyCounts();
+  return malformedDirty || counts.edited > 0 || counts.deleted > 0;
+}
+function updateDirtyIndicators() {
+  const counts = dirtyCounts();
+  const details = [];
+  if (counts.edited) details.push(counts.edited + " edited");
+  if (counts.deleted) details.push(counts.deleted + " deleted");
+  const visibleCount = entries.filter(e => renderedIds.has(e.id)).length;
+  const count = appliedFilter.trim() ? visibleCount + " of " + entries.length :
+    entries.length + (entries.length === 1 ? " entry" : " entries");
+  $("shown").textContent = count + (details.length ? " · " + details.join(" · ") : "");
+  $("title").textContent = "Annotate — " + entries.length +
+    (entries.length === 1 ? " annotation" : " annotations");
+  $("save").classList.toggle("primary", listDirty());
+  doc.querySelectorAll(".entry").forEach(block => {
+    const entry = entries.find(e => e.id === Number(block.dataset.id));
+    const marker = block.querySelector(".edited");
+    if (marker) marker.hidden = !entry || !entryEdited(entry);
+  });
+}
+function showDirtyStatus() {
+  setStatus("liststatus", listDirty() ? "Unsaved edits." : "", false);
+}
+function requestClose(reason) {
+  collectEdits();
+  const hasAdd = addDirty(), hasList = listDirty();
+  if (!hasAdd && !hasList) return host({action:"close"});
+  if ((reason === "escape" || reason === "shortcut") && closeReason === reason) {
+    return host({action:"close"});
+  }
+  closeReason = reason;
+  const location = hasAdd && hasList ? "Add and List drafts" : hasAdd ? "Add draft" : "List edits";
+  $("close-message").textContent = "You have unsaved " + location + ". Keep editing or discard them and close." +
+    (reason === "escape" ? " Press Esc again to discard and close." :
+     reason === "shortcut" ? " Press the shortcut again to discard and close." : "");
+  $("close-warning").hidden = false;
+}
+$("keep-editing").onclick = () => { disarmClose(); listOpen() ? doc.focus() : $("comment").focus(); };
+$("discard-close").onclick = () => host({action:"close"});
+// Any intervening typing cancels the second-keypress discard permission.
+document.addEventListener("input", disarmClose, true);
+
 /* ---------- window chrome ---------- */
-$("close").onclick = () => host({action:"close"});
+$("close").onclick = () => requestClose("button");
 $("minimise").onclick = () => host({action:"minimise"});
 $("sublime").onclick = () => host({action:"sublime"});
 $("title").addEventListener("mousedown", e => { if (e.button === 0) host({action:"drag"}); });
@@ -153,7 +237,7 @@ $("grip").addEventListener("mousedown", e => { e.preventDefault(); host({action:
 const showPane = name => {
   document.querySelectorAll(".tab").forEach(t => t.classList.toggle("on", t.dataset.pane === name));
   document.querySelectorAll(".pane").forEach(p => p.classList.toggle("on", p.id === "pane-" + name));
-  if (name === "add") $("comment").focus(); else $("filter").focus();
+  if (name === "add") { resizeQuote(); $("comment").focus(); } else $("filter").focus();
 };
 document.querySelectorAll(".tab").forEach(t => t.onclick = () => showPane(t.dataset.pane));
 
@@ -161,7 +245,14 @@ document.querySelectorAll(".tab").forEach(t => t.onclick = () => showPane(t.data
 $("source").textContent = S.source;
 $("stamp").textContent = S.stamp;
 const countChars = () => $("chars").textContent = $("quote").value.length + " chars";
-$("quote").addEventListener("input", countChars);
+function resizeQuote() {
+  $("quote").style.height = "80px";
+  $("quote").style.height = Math.min(180, Math.max(80, $("quote").scrollHeight + 2)) + "px";
+}
+$("quote").addEventListener("input", () => { countChars(); resizeQuote(); });
+$("chips").parentElement.hidden = S.candidates.length <= 1;
+$("chips").hidden = S.candidates.length <= 1;
+if (S.candidates.length <= 1) $("chips").style.display = "none";
 
 S.candidates.forEach((c, i) => {
   const b = document.createElement("button");
@@ -177,22 +268,33 @@ function pickCandidate(i) {
   [...$("chips").children].forEach((b, n) => b.classList.toggle("on", n === i));
   $("quote").value = S.candidates[i].text;
   countChars();
+  resizeQuote();
+  disarmClose();
 }
 if (S.candidates.length) pickCandidate(0);
+else countChars();
 
 const addAnnotation = () => {
   const quote = $("quote").value.trim(), comment = $("comment").value.trim();
-  if (!quote) return setStatus("addstatus", "The quote cannot be empty.", false);
-  if (!comment) { setStatus("addstatus", "Write a comment before adding this entry.", false);
+  if (!quote) return setStatus("addstatus", "The quote cannot be empty.", false, true);
+  if (!comment) { setStatus("addstatus", "Write a note before adding this entry.", false, true);
                   return $("comment").focus(); }
+  collectEdits();
+  if (listDirty()) {
+    showPane("list");
+    setStatus("liststatus", "Save or revert your List edits before adding this note. Your Add draft is kept.", false);
+    return;
+  }
   host({action:"add", quote, comment, label:(S.candidates[candidate]||{}).label || ""});
 };
 $("add").onclick = addAnnotation;
-$("cancel").onclick = () => host({action:"close"});
+$("cancel").onclick = () => requestClose("button");
 
 /* ---------- the list, as one document ---------- */
 let nextEntryId = 0;
 let entries = S.entries.map(e => ({...e, id:nextEntryId++}));
+let baseline = new Map(entries.map(e => [e.id, {...e}]));
+let malformedDirty = false;
 let renderedIds = new Set();
 let appliedFilter = "";
 let saveProblem = S.saveProblem || "";
@@ -213,16 +315,18 @@ function renderDoc() {
     doc.innerHTML = '<div class="empty" contenteditable="false">' +
       (entries.length ? "Nothing matches that filter." : "No annotations yet. Add one from the Add tab.") +
       "</div>";
+    updateDirtyIndicators();
     return;
   }
   const hi = s => q ? esc(s).replace(new RegExp("(" + q.replace(/[.*+?^${}()|[\]\\]/g,"\\$&") + ")","gi"),
                                      "<mark>$1</mark>") : esc(s);
   doc.innerHTML = visible.map((e, i) => `
     <div class="entry ${i % 2 ? "b" : "a"}" data-id="${e.id}">
-      <div class="blame" contenteditable="false">${esc(e.stamp)} · ${esc(e.source)}</div>
+      <div class="blame" contenteditable="false"><span class="blame-reference">${esc(e.stamp)} · ${esc(e.source)}</span><span class="edited" hidden>edited</span></div>
       <div class="q">${hi(e.quote)}</div>
       <div class="c">→ ${hi(e.comment)}</div>
     </div>`).join('<div class="sep" contenteditable="false">---</div>');
+  updateDirtyIndicators();
 }
 
 /* The last rendered ids belong to this DOM, regardless of the new filter text.
@@ -230,7 +334,9 @@ function renderDoc() {
 function collectEdits() {
   const edits = new Map();
   const malformed = () => {
-    setStatus("liststatus", "An entry lost its quote or comment structure. Undo the edit (Ctrl+Z), or copy your text before Revert. Filtering and saving are paused.", false);
+    malformedDirty = true;
+    updateDirtyIndicators();
+    setStatus("liststatus", "An entry lost its quote or comment structure. Undo the edit (Ctrl+Z), or copy your text before Revert. Filtering and saving are paused.", false, true);
     return false;
   };
   for (const node of doc.childNodes) {
@@ -270,9 +376,15 @@ function collectEdits() {
       !part.parentElement.classList.contains("entry"))) {
     return malformed();
   }
-  entries = entries
-    .filter(e => edits.has(e.id) || !renderedIds.has(e.id))
-    .map(e => edits.has(e.id) ? {...e, ...edits.get(e.id)} : e);
+  malformedDirty = false;
+  // Retain metadata for a deleted block so native Undo can restore its stable ID.
+  const drafts = new Map(entries.map(e => [e.id, e]));
+  for (const id of renderedIds) {
+    if (!edits.has(id)) drafts.delete(id);
+    else drafts.set(id, {...baseline.get(id), ...drafts.get(id), ...edits.get(id)});
+  }
+  entries = [...baseline.keys()].filter(id => drafts.has(id)).map(id => drafts.get(id));
+  updateDirtyIndicators();
   return true;
 }
 
@@ -299,7 +411,9 @@ doc.addEventListener("beforeinput", event => {
   document.execCommand("insertLineBreak");
 });
 
-doc.addEventListener("input", () => setStatus("liststatus", "Unsaved edits.", false));
+doc.addEventListener("input", () => {
+  if (collectEdits()) showDirtyStatus();
+});
 $("filter").addEventListener("input", () => {
   if (!collectEdits()) { $("filter").value = appliedFilter; return; }
   renderDoc();
@@ -330,11 +444,16 @@ $("revert").onclick = () => host({action:"revert"});
 window.fromHost = msg => {
   if (msg.kind === "entries") {
     entries = msg.entries.map(e => ({...e, id:nextEntryId++}));
+    baseline = new Map(entries.map(e => [e.id, {...e}]));
+    malformedDirty = false;
+    disarmClose();
     updateSaveProblem(msg.saveProblem);
     renderDoc();
     if (msg.status) setStatus("liststatus", msg.status, true);
   } else if (msg.kind === "error") {
-    setStatus(msg.pane === "add" ? "addstatus" : "liststatus", msg.status, false);
+    setStatus(msg.pane === "add" ? "addstatus" : "liststatus", msg.status, false, true);
+  } else if (msg.kind === "requestClose") {
+    requestClose(msg.reason === "shortcut" ? "shortcut" : "window");
   } else if (msg.kind === "status") {
     setStatus(msg.pane === "add" ? "addstatus" : "liststatus", msg.status, !!msg.ok);
   }
@@ -343,7 +462,7 @@ window.fromHost = msg => {
 /* ---------- keys ---------- */
 const listOpen = () => $("pane-list").classList.contains("on");
 addEventListener("keydown", e => {
-  if (e.key === "Escape") { host({action:"close"}); return; }
+  if (e.key === "Escape") { e.preventDefault(); if (!e.repeat) requestClose("escape"); return; }
   if (!e.ctrlKey) return;
   const k = e.key.toLowerCase();
   if (k === "enter") { e.preventDefault(); listOpen() ? $("save").click() : addAnnotation(); }

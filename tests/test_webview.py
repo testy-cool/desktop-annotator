@@ -1,4 +1,5 @@
 import json
+import sys
 import unittest
 import tempfile
 from pathlib import Path
@@ -13,6 +14,7 @@ from desktop_annotator.webview import (
     build_state,
     entries_payload,
     page_with_state,
+    show_annotation_popup,
 )
 
 
@@ -235,6 +237,129 @@ class GuardedHostSaveTests(unittest.TestCase):
                 host._reload_entries("Reloaded")
             self.assertIs(host.document, baseline)
             self.assertEqual(host.messages, [{"kind": "error", "pane": "list", "status": "Migration conflict"}])
+
+
+class GuardedHostCloseTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.directory = Path(temporary.name)
+        self.gtk, self.webkit = Mock(), Mock()
+        self.host = AnnotatorWindow(
+            candidates=[], source="Firefox", directory=self.directory,
+            gtk=self.gtk, gdk=Mock(), webkit=self.webkit, glib=Mock(),
+        )
+
+    def ready(self):
+        self.host._on_load_changed(self.host.view, self.webkit.LoadEvent.FINISHED)
+
+    def messages(self):
+        return [
+            json.loads(call.args[0].removeprefix("window.fromHost(").removesuffix(")"))
+            for call in self.host.view.evaluate_javascript.call_args_list
+        ]
+
+    def test_native_close_routes_to_the_page_and_keeps_the_window_open(self):
+        self.ready()
+
+        self.assertTrue(self.host._on_delete_event(self.host.window, None))
+
+        self.assertEqual(self.messages(), [{"kind": "requestClose", "reason": "window"}])
+        self.host.window.close.assert_not_called()
+
+    def test_explicit_page_close_allows_native_close_without_requesting_again(self):
+        self.ready()
+        allowed = []
+        self.host.window.close.side_effect = lambda: allowed.append(
+            not self.host._on_delete_event(self.host.window, None)
+        )
+
+        self.host._do_close({"action": "close"})
+
+        self.host.window.close.assert_called_once_with()
+        self.assertEqual(allowed, [True])
+        self.assertEqual(self.messages(), [])
+
+    def test_successful_add_closes_without_a_second_discard_prompt(self):
+        self.ready()
+        allowed = []
+        self.host.window.close.side_effect = lambda: allowed.append(
+            not self.host._on_delete_event(self.host.window, None)
+        )
+
+        self.host._do_add({"quote": "captured", "comment": "My note", "label": "Clipboard"})
+
+        self.assertEqual(load_document(self.directory).entries[0].comment, "My note")
+        self.assertEqual(self.host.saved_path, self.directory / "annotations.md")
+        self.host.window.close.assert_called_once_with()
+        self.assertEqual(allowed, [True])
+        self.assertEqual(self.messages(), [])
+
+    def test_failed_add_keeps_the_native_close_guard(self):
+        self.ready()
+
+        self.host._do_add({"quote": "captured", "comment": ""})
+
+        self.host.window.close.assert_not_called()
+        self.assertFalse(self.host._close_allowed)
+        self.assertEqual(self.messages()[0]["kind"], "error")
+
+    def test_shortcut_before_page_load_waits_for_finished_and_flushes_once(self):
+        self.assertFalse(self.host.request_close("shortcut"))
+        self.host._on_load_changed(self.host.view, self.webkit.LoadEvent.STARTED)
+        self.assertEqual(self.messages(), [])
+
+        self.ready()
+        self.ready()
+
+        self.assertEqual(self.messages(), [{"kind": "requestClose", "reason": "shortcut"}])
+        self.host.window.close.assert_not_called()
+
+    def test_window_close_before_page_load_is_also_preserved(self):
+        self.assertTrue(self.host._on_delete_event(self.host.window, None))
+        self.assertEqual(self.messages(), [])
+
+        self.ready()
+
+        self.assertEqual(self.messages(), [{"kind": "requestClose", "reason": "window"}])
+
+    def test_constructor_connects_native_and_load_signals(self):
+        self.host.window.connect.assert_any_call("delete-event", self.host._on_delete_event)
+        self.host.window.connect.assert_any_call("destroy", self.gtk.main_quit)
+        self.host.view.connect.assert_called_once_with("load-changed", self.host._on_load_changed)
+
+
+class WebPopupToggleTests(unittest.TestCase):
+    def popup(self, toggle, window, gtk, glib):
+        repository = Mock(Gtk=gtk, GLib=glib)
+        with patch.dict(sys.modules, {"gi": Mock(), "gi.repository": repository}), patch(
+            "desktop_annotator.webview.AnnotatorWindow", return_value=window
+        ):
+            return show_annotation_popup(
+                candidates=[], source="Firefox", directory=Path("/tmp"),
+                toggle_instance=toggle,
+            )
+
+    def test_toggle_schedules_a_page_close_request_with_the_shortcut_reason(self):
+        toggle, window, gtk, glib = Mock(), Mock(saved_path=None), Mock(), Mock()
+        gtk.main.side_effect = lambda: toggle.set_toggle_callback.call_args.args[0]()
+
+        self.popup(toggle, window, gtk, glib)
+
+        glib.idle_add.assert_called_once_with(window.request_close, "shortcut")
+        window.window.close.assert_not_called()
+        window.present.assert_called_once_with()
+
+    def test_toggle_already_pending_exits_before_presenting_or_starting_gtk(self):
+        toggle, window, gtk, glib = Mock(), Mock(), Mock(), Mock()
+        toggle.set_toggle_callback.side_effect = lambda callback: callback()
+
+        result = self.popup(toggle, window, gtk, glib)
+
+        self.assertIsNone(result)
+        glib.idle_add.assert_called_once_with(window.request_close, "shortcut")
+        window.present.assert_not_called()
+        gtk.main.assert_not_called()
 
 
 if __name__ == "__main__":

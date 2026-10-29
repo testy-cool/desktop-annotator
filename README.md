@@ -39,6 +39,10 @@ note and the start of the next and copy exactly that. Filter with `Ctrl+F`,
 copy the selection with `Ctrl+C`, edit any note in place and press `Save edits`
 to write the file back.
 
+Changed notes show an `edited` marker, and the footer counts edited and deleted
+notes. `Save edits` turns blue while changes are unsaved; saving or reverting
+clears those indicators. Editing a note back to its saved text clears its marker.
+
 Edits stay in the list when you change its filter. `Copy all` copies every note,
 including edits hidden by the filter. Removing a whole visible note deletes
 that note when you save; notes hidden by the filter are kept.
@@ -80,6 +84,17 @@ Pressing the shortcut again closes an open window instead of opening a second
 one. If two monitors are connected the window opens on the one to the right of
 your mouse, so it does not cover what you are reading.
 
+If either tab has unsaved work, closing first shows a warning with
+`Keep editing` and `Discard and close`. A second `Esc` or a second press of the
+launcher shortcut discards only after its own warning and before any further
+typing. The close button, Cancel, and the native window close always need an
+explicit `Discard and close` when work is unsaved.
+
+A captured quote alone is not an unsaved draft. Changing that quote or typing a
+note makes the Add tab unsaved. `Ctrl+Enter` saves only the current tab. If the
+List tab has unsaved edits, adding a note takes you there first to save or revert
+those edits; your Add draft is kept.
+
 ## Shortcuts
 
 | Key | Does |
@@ -89,7 +104,7 @@ your mouse, so it does not cover what you are reading.
 | `Ctrl+2` or `Ctrl+L` | List tab |
 | `Ctrl+F` | Filter the list |
 | `Ctrl+A` | Select every note in the list |
-| `Esc` | Close |
+| `Esc` | Close; warn first if either tab has unsaved work |
 
 The arrow button in the title bar opens `annotations.md` in Sublime Text, if you
 have the `subl` command. The HTML interface stays open so unsaved edits remain available.
