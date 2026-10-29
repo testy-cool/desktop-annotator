@@ -22,21 +22,22 @@
   .btn.x:hover{background:#a33;color:#fff}
   .tabs{display:flex;border-bottom:1px solid var(--line);background:#191919;flex:none;
         user-select:none}
-  .tab{padding:8px 16px;font-size:12px;color:var(--faint);cursor:pointer;font-family:inherit;
-       border:0;background:transparent;border-bottom:2px solid transparent}
+  .tab{padding:8px 16px;font-size:14px;color:var(--dim);cursor:pointer;font-family:inherit;
+       border:0;background:transparent}
   .tab:hover{color:var(--text)}
-  .tab.on{color:var(--text);border-bottom-color:var(--accent);background:var(--card)}
-  .tab .k{color:var(--faint);font-size:10px;margin-left:6px}
-  .pane{flex:1;min-height:0;padding:14px;display:none;flex-direction:column;gap:10px}
+  .tab.on{color:var(--text);background:#303030}
+  .tab .k{color:var(--dim);font-size:12px;margin-left:6px}
+  .pane{flex:1;min-height:0;min-width:0;width:100%;padding:14px;display:none;flex-direction:column;gap:10px}
   .pane.on{display:flex}
   .meta{display:flex;gap:10px;align-items:baseline;font-size:12px;color:var(--dim)}
-  .meta .src{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .meta .stamp{margin-left:auto;color:var(--faint);font-size:11px;white-space:nowrap}
+  .meta .src{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .meta .stamp{margin-left:auto;color:var(--faint);font-size:12px;white-space:nowrap}
   .pick{display:flex;gap:6px;align-items:center;flex:none}
-  .chip{font-size:11px;padding:3px 10px;border:1px solid var(--line);background:transparent;
+  #chips{min-width:0;flex-wrap:wrap}
+  .chip{font-size:14px;padding:3px 10px;border:1px solid var(--line);background:transparent;
         color:var(--faint);cursor:pointer;font-family:inherit}
   .chip.on{background:#303030;border-color:#5a5a5a;color:var(--text)}
-  .count{font-size:11px;color:var(--faint);white-space:nowrap}
+  .count{font-size:12px;color:var(--faint);white-space:nowrap}
   textarea,input{font-family:inherit;color:var(--text);background:var(--panel);
                  border:1px solid var(--line);outline:none}
   textarea{padding:10px 12px;font-size:13px;line-height:1.5;resize:none}
@@ -44,32 +45,33 @@
   #quote{flex:1 1 auto;min-height:96px;max-height:42%;color:#cfcfcf}
   #comment{flex:1 1 auto;min-height:88px;border-color:var(--accent)}
   .foot{display:flex;align-items:center;gap:8px;flex:none;user-select:none}
-  .status{font-size:11px;color:var(--danger);flex:1;overflow:hidden;text-overflow:ellipsis;
-          white-space:nowrap}
+  .status{font-size:12px;color:var(--danger);flex:1;min-width:0;overflow-wrap:anywhere}
   .status.ok{color:var(--ok)}
-  .hint{font-size:11px;color:#5a5a5a;white-space:nowrap}
-  .go{font-size:12px;padding:6px 14px;border:1px solid var(--line2);background:#2a2a2a;
+  .hint{font-size:12px;color:var(--dim);white-space:nowrap}
+  .go{font-size:14px;padding:6px 14px;border:1px solid var(--line2);background:#2a2a2a;
       color:var(--text);cursor:pointer;font-family:inherit;white-space:nowrap}
   .go:hover{background:#343434}
   .go.primary{background:#2f4a7a;border-color:#3d5f96}
   .go.primary:hover{background:#37568c}
+  .go:disabled{opacity:.55;cursor:not-allowed}
+  .save-problem{font-size:12px;color:var(--danger);overflow-wrap:anywhere;flex:none}
   .go.ghost{background:transparent;color:var(--dim);border-color:transparent}
   .go.ghost:hover{background:#252525;color:var(--text)}
   .search{display:flex;gap:8px;align-items:center;flex:none;user-select:none}
-  .search input{flex:1;padding:6px 10px;font-size:12px}
+  .search input{flex:1;min-width:0;padding:6px 10px;font-size:14px}
 
   /* one continuous document: drag anywhere, select across as many entries as you like */
-  #doc{flex:1;min-height:80px;overflow:auto;border:1px solid var(--line);background:var(--panel);
+  #doc{flex:1;min-height:80px;min-width:0;overflow:auto;border:1px solid var(--line);background:var(--panel);
        font-size:13px;outline:none;padding:0;cursor:text;white-space:normal}
   #doc:focus{border-color:var(--line2)}
   .entry{padding:10px 14px 12px}
   .entry.a{background:#202020}
   .entry.b{background:#262626}
   /* dim reference line, like a blame annotation: shown, never copied, never edited */
-  .blame{font-size:10px;color:var(--faint);margin-bottom:5px;user-select:none;
+  .blame{font-size:12px;color:var(--faint);margin-bottom:5px;user-select:none;
          -webkit-user-select:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .q{color:#cfcfcf;white-space:pre-wrap;word-wrap:break-word}
-  .c{color:var(--text);white-space:pre-wrap;word-wrap:break-word;margin-top:2px}
+  .q{min-height:1.5em;color:#cfcfcf;white-space:pre-wrap;overflow-wrap:anywhere}
+  .c{color:var(--text);white-space:pre-wrap;overflow-wrap:anywhere;margin-top:2px}
   .sep{color:var(--faint);font-size:13px;padding:0 14px;line-height:2.1;background:#1d1d1d}
   .empty{padding:22px 14px;color:var(--faint);font-size:12px;user-select:none}
   mark{background:#3a3a1a;color:#e8e0a0;padding:0 2px}
@@ -117,6 +119,7 @@
       <button class="go ghost" id="copyall">Copy all</button>
     </div>
     <div id="doc" contenteditable spellcheck="false"></div>
+    <div id="saveproblem" class="save-problem" role="alert" hidden></div>
     <div class="foot">
       <span class="status" id="liststatus"></span>
       <span class="hint">drag to select · Ctrl+C</span>
@@ -188,14 +191,20 @@ $("add").onclick = addAnnotation;
 $("cancel").onclick = () => host({action:"close"});
 
 /* ---------- the list, as one document ---------- */
-let entries = S.entries.map((e, i) => ({...e, id:i}));
+let nextEntryId = 0;
+let entries = S.entries.map(e => ({...e, id:nextEntryId++}));
+let renderedIds = new Set();
+let appliedFilter = "";
+let saveProblem = S.saveProblem || "";
 const doc = $("doc");
 
 function renderDoc() {
   const q = $("filter").value.trim().toLowerCase();
+  appliedFilter = $("filter").value;
   const visible = entries.filter(e =>
     !q || e.quote.toLowerCase().includes(q) || e.comment.toLowerCase().includes(q)
          || e.source.toLowerCase().includes(q));
+  renderedIds = new Set(visible.map(e => e.id));
   $("shown").textContent = q ? visible.length + " of " + entries.length
                              : entries.length + (entries.length === 1 ? " entry" : " entries");
   $("title").textContent = "Annotate — " + entries.length +
@@ -216,34 +225,85 @@ function renderDoc() {
     </div>`).join('<div class="sep" contenteditable="false">---</div>');
 }
 
-/* What the document says now. Entries hidden by the filter pass through
-   untouched; a visible entry whose block was deleted is dropped. */
-function editedEntries() {
+/* The last rendered ids belong to this DOM, regardless of the new filter text.
+   Only their missing blocks are deletions; hidden drafts always pass through. */
+function collectEdits() {
   const edits = new Map();
-  doc.querySelectorAll(".entry").forEach(block => {
-    edits.set(+block.dataset.id, {
-      quote: block.querySelector(".q").innerText.replace(/\n$/, ""),
-      comment: block.querySelector(".c").innerText.replace(/\n$/, "").replace(/^→\s*/, ""),
+  const malformed = () => {
+    setStatus("liststatus", "An entry lost its quote or comment structure. Undo the edit (Ctrl+Z), or copy your text before Revert. Filtering and saving are paused.", false);
+    return false;
+  };
+  for (const node of doc.childNodes) {
+    if (node.nodeType === Node.ELEMENT_NODE &&
+        (node.classList.contains("entry") ||
+         (node.matches(".sep, .empty") && node.contentEditable === "false"))) continue;
+    if (node.textContent.trim()) return malformed();
+  }
+  for (const block of doc.querySelectorAll(".entry")) {
+    const id = Number(block.dataset.id);
+    const quotes = block.querySelectorAll(".q"), comments = block.querySelectorAll(".c");
+    // WebKit can leave an empty field shell after deleting a whole selection.
+    const hasBodyText = [...block.childNodes].some(node => {
+      if (node.nodeType === Node.ELEMENT_NODE && node.matches('.blame[contenteditable="false"]')) return false;
+      const text = node.nodeType === Node.ELEMENT_NODE && node.classList.contains("c")
+        ? node.innerText.replace(/^→\s*/, "") : node.textContent;
+      return text.trim();
     });
-  });
-  const shown = new Set(entries.filter(isVisible).map(e => e.id));
-  return entries
-    .filter(e => edits.has(e.id) || !shown.has(e.id))
+    if (block.hasAttribute("data-id") && renderedIds.has(id) && !hasBodyText) continue;
+    if (!block.hasAttribute("data-id") || !renderedIds.has(id) || edits.has(id) ||
+        quotes.length !== 1 || comments.length !== 1 ||
+        quotes[0].parentElement !== block || comments[0].parentElement !== block) {
+      return malformed();
+    }
+    for (const node of block.childNodes) {
+      if (node === quotes[0] || node === comments[0] ||
+          (node.nodeType === Node.ELEMENT_NODE && node.classList.contains("blame") &&
+           node.contentEditable === "false")) continue;
+      if (node.textContent.trim()) return malformed();
+    }
+    edits.set(id, {
+      quote: quotes[0].innerText.replace(/\n$/, ""),
+      comment: comments[0].innerText.replace(/\n$/, "").replace(/^→\s*/, ""),
+    });
+  }
+  if ([...doc.querySelectorAll(".q, .c")].some(part =>
+      !part.parentElement.classList.contains("entry"))) {
+    return malformed();
+  }
+  entries = entries
+    .filter(e => edits.has(e.id) || !renderedIds.has(e.id))
     .map(e => edits.has(e.id) ? {...e, ...edits.get(e.id)} : e);
+  return true;
 }
 
-function isVisible(entry) {
-  const q = $("filter").value.trim().toLowerCase();
-  if (!q) return true;
-  return entry.quote.toLowerCase().includes(q) || entry.comment.toLowerCase().includes(q)
-      || entry.source.toLowerCase().includes(q);
+function updateSaveProblem(problem) {
+  saveProblem = problem || "";
+  $("save").disabled = !!saveProblem;
+  $("save").title = saveProblem;
+  $("saveproblem").hidden = !saveProblem;
+  $("saveproblem").textContent = saveProblem ? "Saving is blocked: " + saveProblem + " Copy your drafts before Revert or reopening the file." : "";
 }
 
-// Copy all must hand back exactly what dragging over everything would.
+// Copy all includes hidden drafts; selection copy still follows the visible DOM.
 const plainText = list => list.map(e => e.quote + "\n→ " + e.comment).join("\n---\n");
 
+// Keep Enter inside its quote/comment instead of cloning the field block.
+doc.addEventListener("beforeinput", event => {
+  if (event.inputType !== "insertParagraph") return;
+  const selection = getSelection();
+  const node = selection.anchorNode;
+  const element = node && (node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement);
+  const field = element && element.closest(".q, .c");
+  if (!field || !doc.contains(field)) return;
+  event.preventDefault();
+  document.execCommand("insertLineBreak");
+});
+
 doc.addEventListener("input", () => setStatus("liststatus", "Unsaved edits.", false));
-$("filter").addEventListener("input", renderDoc);
+$("filter").addEventListener("input", () => {
+  if (!collectEdits()) { $("filter").value = appliedFilter; return; }
+  renderDoc();
+});
 
 $("selectall").onclick = () => {
   const range = document.createRange();
@@ -255,13 +315,13 @@ $("selectall").onclick = () => {
   setStatus("liststatus", "Everything selected. Ctrl+C to copy.", true);
 };
 $("copyall").onclick = () => {
-  if (!entries.length) return;
-  host({action:"copy", text:plainText(editedEntries())});
+  if (!collectEdits() || !entries.length) return;
+  host({action:"copy", text:plainText(entries)});
   setStatus("liststatus", "All " + entries.length + " entries copied.", true);
 };
 $("save").onclick = () => {
-  const edited = editedEntries();
-  host({action:"save", entries:edited.map(e =>
+  if (saveProblem || !collectEdits()) return;
+  host({action:"save", entries:entries.map(e =>
     ({stamp:e.stamp, source:e.source, quote:e.quote, comment:e.comment}))});
 };
 $("revert").onclick = () => host({action:"revert"});
@@ -269,7 +329,8 @@ $("revert").onclick = () => host({action:"revert"});
 /* ---------- messages from the host ---------- */
 window.fromHost = msg => {
   if (msg.kind === "entries") {
-    entries = msg.entries.map((e, i) => ({...e, id:i}));
+    entries = msg.entries.map(e => ({...e, id:nextEntryId++}));
+    updateSaveProblem(msg.saveProblem);
     renderDoc();
     if (msg.status) setStatus("liststatus", msg.status, true);
   } else if (msg.kind === "error") {
@@ -294,6 +355,7 @@ addEventListener("keydown", e => {
   }
 });
 
+updateSaveProblem(saveProblem);
 renderDoc();
 showPane(S.entries.length && !S.candidates.length ? "list" : "add");
 </script>

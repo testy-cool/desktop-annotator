@@ -5,6 +5,8 @@ from pathlib import Path
 
 from desktop_annotator.annotation import (
     Annotation,
+    DocumentSnapshot,
+    parse_annotation_list,
     append_annotation,
     render_annotation_list,
     save_annotation_list,
@@ -59,5 +61,10 @@ def update_annotation(original: Annotation, *, quote: str, comment: str) -> Anno
     )
 
 
-def save_edited_annotations(annotations: list[Annotation], directory: Path) -> Path:
-    return save_annotation_list(directory, render_annotation_list(annotations))
+def save_edited_annotations(
+    annotations: list[Annotation], directory: Path, *, expected: DocumentSnapshot
+) -> DocumentSnapshot:
+    text = render_annotation_list(annotations)
+    if parse_annotation_list(text) != annotations:
+        raise ValueError("These edits cannot be represented safely in annotation Markdown. Copy your draft before changing it.")
+    return save_annotation_list(directory, text, expected=expected)

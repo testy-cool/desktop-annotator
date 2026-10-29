@@ -1,4 +1,6 @@
 import unittest
+import tempfile
+from unittest.mock import Mock, patch
 from pathlib import Path
 
 from desktop_annotator.app import (
@@ -14,9 +16,11 @@ from desktop_annotator.app import (
     _install_toggle_close,
     _load_gtk,
     _move_popup_to_right_monitor,
+    _open_list_in_sublime,
     _schedule_list_scroll_to_bottom,
     _scroll_text_view_to_bottom,
     _show_list_page,
+    show_annotation_popup,
 )
 
 
@@ -403,6 +407,75 @@ class AnnotationListPresentationTests(unittest.TestCase):
 
         self.assertIn(tag, buffer.get_iter_at_offset(2).get_tags())
         self.assertNotIn(tag, buffer.get_iter_at_offset(15).get_tags())
+
+
+class SublimeDraftSafetyTests(unittest.TestCase):
+    def test_safe_draft_is_saved_before_external_editor_opens(self):
+        window = Mock()
+        window._save_edits.return_value = True
+        path = Path("/tmp/annotations.md")
+        events = []
+        window._save_edits.side_effect = lambda: events.append("save") or True
+        with patch("desktop_annotator.app._launch_sublime", side_effect=lambda path: events.append("open")):
+            _open_list_in_sublime(window, path)
+        self.assertEqual(events, ["save", "open"])
+        window.close.assert_called_once_with()
+
+    def test_unsafe_draft_stays_open_while_external_file_can_be_repaired(self):
+        window = Mock()
+        window._save_edits.return_value = None
+        path = Path("/tmp/annotations.md")
+        with patch("desktop_annotator.app._launch_sublime") as launch:
+            _open_list_in_sublime(window, path)
+        launch.assert_called_once_with(path)
+        window.close.assert_not_called()
+        window.list_status.set_text.assert_not_called()
+
+    def test_editor_launch_failure_leaves_the_annotator_open(self):
+        window = Mock()
+        window._save_edits.return_value = True
+        with patch("desktop_annotator.app._launch_sublime", side_effect=OSError("unavailable")):
+            _open_list_in_sublime(window, Path("/tmp/annotations.md"))
+        window.close.assert_not_called()
+        self.assertIn("Could not launch", window.list_status.set_text.call_args.args[0])
+
+
+class LegacyFileLoadTests(unittest.TestCase):
+    def window_class(self, directory):
+        """Capture the GTK window class without creating display widgets."""
+        classes = []
+
+        class Captured(Exception):
+            pass
+
+        class Window:
+            def __new__(cls):
+                classes.append(cls)
+                raise Captured
+
+        with patch("desktop_annotator.app._load_gtk", return_value=(Mock(), Mock(Window=Window), Mock())):
+            with self.assertRaises(Captured):
+                show_annotation_popup(candidates=[], source="Firefox", directory=directory)
+        return classes[0]
+
+    def test_invalid_legacy_utf8_disables_saving_and_reports_load_problem(self):
+        with tempfile.TemporaryDirectory() as name:
+            directory = Path(name)
+            legacy = directory / "2026-08-22.md"
+            legacy.write_bytes(b"\xff legacy annotation")
+            window_class = self.window_class(directory)
+            window = object.__new__(window_class)
+            window.list_status = Mock()
+            window.list_save_button = Mock()
+            window.list_view = Mock()
+
+            window._reload_list()
+
+            window.list_save_button.set_sensitive.assert_called_once_with(False)
+            self.assertIn("Could not load annotations", window.list_status.set_text.call_args.args[0])
+            self.assertFalse(window.document.entries)
+            self.assertEqual(legacy.read_bytes(), b"\xff legacy annotation")
+            self.assertFalse((directory / "annotations.md").exists())
 
 
 if __name__ == "__main__":
