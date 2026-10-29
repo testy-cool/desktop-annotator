@@ -20,12 +20,19 @@ from desktop_annotator.annotation import (
     load_document,
 )
 from desktop_annotator.capture import TextCandidate
-from desktop_annotator.positioning import MonitorRect, popup_position
+from desktop_annotator.positioning import (
+    MonitorRect,
+    monitor_for_pointer,
+    monitor_to_right,
+    popup_position,
+)
+from desktop_annotator.settings import load_layout, save_layout
 from desktop_annotator.workflow import annotation_source, save_comment, save_edited_annotations
 
 
 WINDOW_WIDTH = 760
 WINDOW_HEIGHT = 640
+SPLIT_WINDOW_WIDTH = 1200
 STAMP_FORMAT = "%Y-%m-%d %H:%M"
 UI_FILE = Path(__file__).with_name("ui") / "index.html"
 
@@ -69,6 +76,7 @@ def build_state(
     annotations: list[Annotation],
     now: datetime | None = None,
     save_problem: str = "",
+    layout: str = "tabs",
 ) -> dict:
     stamp = (now or datetime.now()).strftime(STAMP_FORMAT)
     return {
@@ -77,6 +85,7 @@ def build_state(
         "candidates": [{"label": item.label, "text": item.text} for item in candidates],
         "entries": entries_payload(annotations),
         "saveProblem": save_problem,
+        "layout": layout,
     }
 
 
@@ -99,7 +108,7 @@ def _launch_sublime(path: Path) -> None:
 def _monitor_rects(display) -> list[MonitorRect]:
     rects = []
     for index in range(display.get_n_monitors()):
-        geometry = display.get_monitor(index).get_geometry()
+        geometry = display.get_monitor(index).get_workarea()
         rects.append(
             MonitorRect(
                 x=geometry.x, y=geometry.y, width=geometry.width, height=geometry.height
@@ -118,10 +127,13 @@ class AnnotatorWindow:
         self._close_allowed = False
         self._page_ready = False
         self._pending_close_reason: str | None = None
+        self.layout = load_layout()
+        self._width = SPLIT_WINDOW_WIDTH if self.layout == "split" else WINDOW_WIDTH
+        self._height = WINDOW_HEIGHT
 
         self.window = gtk.Window(title="Annotate")
-        self.window.set_default_size(WINDOW_WIDTH, WINDOW_HEIGHT)
-        self.window.set_size_request(640, 560)
+        self.window.set_default_size(self._width, self._height)
+        self.window.set_size_request(1000 if self.layout == "split" else 640, 560)
         self.window.set_decorated(False)
         self.window.set_skip_taskbar_hint(False)
         self.window.connect("destroy", gtk.main_quit)
@@ -148,6 +160,7 @@ class AnnotatorWindow:
         state = build_state(
             candidates=candidates, source=source, annotations=self.document.entries,
             save_problem=self.document.save_problem,
+            layout=self.layout,
         )
         self.view.load_html(page_with_state(UI_FILE.read_text(encoding="utf-8"), state), "file:///")
 
@@ -226,6 +239,45 @@ class AnnotatorWindow:
             self.Gdk.WindowEdge.SOUTH_EAST, 1, x, y, self.Gtk.get_current_event_time()
         )
 
+    def _do_layout(self, message) -> None:
+        layout = message.get("layout")
+        try:
+            save_layout(layout)
+        except (ValueError, OSError) as error:
+            self._to_page({
+                "kind": "layoutError", "layout": self.layout,
+                "status": f"Could not save layout: {error}",
+            })
+            return
+        self.layout = layout
+        _width, height = self.window.get_size()
+        display = self.Gdk.Display.get_default()
+        monitor = display.get_monitor_at_window(self.window.get_window()) if display else None
+        geometry = monitor.get_workarea() if monitor else None
+        rect = MonitorRect(geometry.x, geometry.y, geometry.width, geometry.height) if geometry else None
+        self._apply_window_size(height=height, monitor=rect)
+        if rect is not None:
+            x, y = self.window.get_position()
+            self.window.move(
+                max(rect.x, min(x, rect.x + rect.width - self._width)),
+                max(rect.y, min(y, rect.y + rect.height - self._height)),
+            )
+        self._to_page({"kind": "layout", "layout": self.layout})
+
+    def _apply_window_size(self, *, height: int, monitor: MonitorRect | None = None) -> None:
+        width = SPLIT_WINDOW_WIDTH if self.layout == "split" else WINDOW_WIDTH
+        minimum_width = 1000 if self.layout == "split" else 640
+        height = max(560, height)
+        minimum_height = 560
+        if monitor is not None:
+            width = min(width, monitor.width)
+            height = min(height, monitor.height)
+            minimum_width = min(minimum_width, monitor.width)
+            minimum_height = min(minimum_height, monitor.height)
+        self._width, self._height = width, height
+        self.window.set_size_request(minimum_width, minimum_height)
+        self.window.resize(width, height)
+
     def _pointer(self) -> tuple[int, int]:
         seat = self.Gdk.Display.get_default().get_default_seat()
         _screen, x, y = seat.get_pointer().get_position()
@@ -284,12 +336,17 @@ class AnnotatorWindow:
         if seat is None or seat.get_pointer() is None:
             return
         pointer_x, pointer_y = self._pointer()
+        monitors = _monitor_rects(display)
+        # Resolve the target before sizing so a narrow monitor can still show
+        # the entire window, including its close and layout controls.
+        target = monitor_to_right(monitors, monitor_for_pointer(monitors, pointer_x, pointer_y))
+        self._apply_window_size(height=self._height, monitor=target)
         x, y = popup_position(
-            _monitor_rects(display),
+            monitors,
             pointer_x=pointer_x,
             pointer_y=pointer_y,
-            width=WINDOW_WIDTH,
-            height=WINDOW_HEIGHT,
+            width=self._width,
+            height=self._height,
         )
         self.window.move(x, y)
 
