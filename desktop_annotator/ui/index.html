@@ -20,15 +20,22 @@
        color:var(--dim);font-size:15px;cursor:pointer;border-radius:2px;font-family:inherit}
   .btn:hover{background:#2c2c2c;color:var(--text)}
   .btn.x:hover{background:#a33;color:#fff}
-  .tabs{display:flex;border-bottom:1px solid var(--line);background:#191919;flex:none;
+  .tabs{display:flex;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--line);background:#191919;flex:none;
         user-select:none}
   .tab{padding:8px 16px;font-size:14px;color:var(--dim);cursor:pointer;font-family:inherit;
        border:0;background:transparent}
   .tab:hover{color:var(--text)}
   .tab.on{color:var(--text);background:#303030}
   .tab .k{color:var(--dim);font-size:13px;margin-left:6px}
+  .layout-control{position:relative;display:flex;align-items:center;gap:8px;margin-left:auto;padding:4px 14px;font-size:14px;color:var(--dim)}
+  .layout-control select{appearance:none;-webkit-appearance:none;font:inherit;color:var(--text);background:var(--panel);border:1px solid var(--line2);padding:3px 24px 3px 6px}
+  .layout-control::after{content:"▾";position:absolute;right:22px;pointer-events:none;color:var(--dim);font-size:14px}
+  .layout-control option{color:var(--text);background:var(--panel)}
+  .layout-control select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .workspace{flex:1;min-height:0;min-width:0;display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr)}
+  .workspace.split{grid-template-columns:repeat(2,minmax(0,1fr))}
   .pane{flex:1;min-height:0;min-width:0;width:100%;padding:14px;display:none;flex-direction:column;gap:6px;overflow:auto}
-  .pane.on{display:flex}
+  .pane.on,.workspace.split .pane{display:flex}
   .meta{display:flex;gap:10px;align-items:baseline;font-size:13px;color:var(--dim)}
   .meta .src{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .meta .stamp{margin-left:auto;color:var(--faint);font-size:13px;white-space:nowrap}
@@ -83,7 +90,6 @@
   .blame-reference{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .q{min-height:1.5em;color:#b0b0b0;white-space:pre-wrap;overflow-wrap:anywhere}
   .c{color:var(--text);white-space:pre-wrap;overflow-wrap:anywhere;margin-top:2px}
-  .sep{color:var(--faint);font-size:13px;padding:0 14px;line-height:1.5;background:#1d1d1d}
   .empty{padding:22px 14px;color:var(--faint);font-size:13px;user-select:none}
   mark{background:#3a3a1a;color:#e8e0a0;padding:0 2px}
   .grip{position:fixed;right:0;bottom:0;width:16px;height:16px;cursor:nwse-resize;z-index:5;
@@ -101,6 +107,9 @@
   <div class="tabs">
     <button class="tab on" data-pane="add">Add<span class="k">Ctrl+1</span></button>
     <button class="tab" data-pane="list">List<span class="k">Ctrl+2</span></button>
+    <label class="layout-control" for="layout">Layout
+      <select id="layout"><option value="tabs">Tabs</option><option value="split">Side by side</option></select>
+    </label>
   </div>
 
   <div id="close-warning" class="close-warning" role="alert" hidden>
@@ -111,6 +120,7 @@
     </div>
   </div>
 
+  <div class="workspace" id="workspace">
   <div class="pane on" id="pane-add">
     <div class="meta">
       <span class="src" id="source"></span>
@@ -148,11 +158,13 @@
       <button class="go" id="save">Save edits<span class="button-key">Ctrl+Enter</span></button>
     </div>
   </div>
+  </div>
 </div>
 <div class="grip" id="grip" title="Resize"></div>
 
 <script>
 const S = window.__STATE__ || {source:"", stamp:"", candidates:[], entries:[]};
+S.layout = S.layout === "split" ? "split" : "tabs";
 const host = m => window.webkit.messageHandlers.host.postMessage(JSON.stringify(m));
 const $ = id => document.getElementById(id);
 const esc = s => s.replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
@@ -233,13 +245,29 @@ $("sublime").onclick = () => host({action:"sublime"});
 $("title").addEventListener("mousedown", e => { if (e.button === 0) host({action:"drag"}); });
 $("grip").addEventListener("mousedown", e => { e.preventDefault(); host({action:"resize"}); });
 
-/* ---------- tabs ---------- */
-const showPane = name => {
+/* ---------- layout and active pane ---------- */
+const activatePane = name => {
   document.querySelectorAll(".tab").forEach(t => t.classList.toggle("on", t.dataset.pane === name));
   document.querySelectorAll(".pane").forEach(p => p.classList.toggle("on", p.id === "pane-" + name));
+};
+const showPane = name => {
+  activatePane(name);
   if (name === "add") { resizeQuote(); $("comment").focus(); } else $("filter").focus();
 };
 document.querySelectorAll(".tab").forEach(t => t.onclick = () => showPane(t.dataset.pane));
+document.querySelectorAll(".pane").forEach(p => {
+  p.addEventListener("focusin", () => activatePane(p.id === "pane-list" ? "list" : "add"));
+});
+function applyLayout(layout) {
+  S.layout = layout === "split" ? "split" : "tabs";
+  $("workspace").classList.toggle("split", S.layout === "split");
+  $("layout").value = S.layout;
+  resizeQuote();
+}
+$("layout").addEventListener("change", () => {
+  applyLayout($("layout").value);
+  host({action:"layout", layout:S.layout});
+});
 
 /* ---------- add pane ---------- */
 $("source").textContent = S.source;
@@ -325,7 +353,7 @@ function renderDoc() {
       <div class="blame" contenteditable="false"><span class="blame-reference">${esc(e.stamp)} · ${esc(e.source)}</span><span class="edited" hidden>edited</span></div>
       <div class="q">${hi(e.quote)}</div>
       <div class="c">→ ${hi(e.comment)}</div>
-    </div>`).join('<div class="sep" contenteditable="false">---</div>');
+    </div>`).join("");
   updateDirtyIndicators();
 }
 
@@ -342,7 +370,7 @@ function collectEdits() {
   for (const node of doc.childNodes) {
     if (node.nodeType === Node.ELEMENT_NODE &&
         (node.classList.contains("entry") ||
-         (node.matches(".sep, .empty") && node.contentEditable === "false"))) continue;
+         (node.matches(".empty") && node.contentEditable === "false"))) continue;
     if (node.textContent.trim()) return malformed();
   }
   for (const block of doc.querySelectorAll(".entry")) {
@@ -440,6 +468,78 @@ $("save").onclick = () => {
 };
 $("revert").onclick = () => host({action:"revert"});
 
+/* Copy visible selections as plain text, with note boundaries only on the clipboard. */
+function selectedNoteText(selection) {
+  if (!selection || selection.rangeCount !== 1 || selection.isCollapsed) return null;
+  const selected = selection.getRangeAt(0);
+  const blocks = [...doc.querySelectorAll('.entry')];
+  // A damaged editable document must remain copyable through native copying.
+  for (const node of doc.childNodes) {
+    if (node.nodeType === Node.ELEMENT_NODE && (node.classList.contains('entry') ||
+        (node.classList.contains('empty') && node.contentEditable === 'false'))) continue;
+    if (node.textContent.trim()) return null;
+  }
+  const result = [];
+  for (const block of blocks) {
+    const quote = block.querySelectorAll('.q'), comment = block.querySelectorAll('.c');
+    if (quote.length !== 1 || comment.length !== 1 ||
+        quote[0].parentElement !== block || comment[0].parentElement !== block) return null;
+    for (const node of block.childNodes) {
+      if (node === quote[0] || node === comment[0] ||
+          (node.nodeType === Node.ELEMENT_NODE && node.matches('.blame[contenteditable="false"]'))) continue;
+      if (node.textContent.trim()) return null;
+    }
+    const fields = [];
+    for (const field of [quote[0], comment[0]]) {
+      if (!selected.intersectsNode(field)) continue;
+      const clip = document.createRange();
+      clip.selectNodeContents(field);
+      if (selected.compareBoundaryPoints(Range.START_TO_START, clip) > 0)
+        clip.setStart(selected.startContainer, selected.startOffset);
+      if (selected.compareBoundaryPoints(Range.END_TO_END, clip) < 0)
+        clip.setEnd(selected.endContainer, selected.endOffset);
+      if (clip.collapsed) continue;
+      const fragment = document.createElement('div');
+      fragment.style.cssText = 'position:fixed;left:0;top:0;opacity:0;pointer-events:none;white-space:pre-wrap';
+      fragment.setAttribute('aria-hidden', 'true');
+      fragment.appendChild(clip.cloneContents());
+      document.body.appendChild(fragment);
+      try {
+        const text = fragment.innerText;
+        if (text.length) fields.push(text);
+      } finally { fragment.remove(); }
+    }
+    if (fields.length) result.push(fields.join('\n'));
+  }
+  return result.length ? result.join('\n---\n') : null;
+}
+// Moving text out of saved notes is surprising when both editors are visible.
+let draggingNote = false;
+doc.addEventListener('dragstart', event => {
+  if (!event.dataTransfer) return;
+  event.dataTransfer.effectAllowed = 'copy';
+  draggingNote = true;
+});
+doc.addEventListener('dragend', () => { draggingNote = false; });
+for (const input of [$('quote'), $('comment')]) {
+  input.addEventListener('dragover', event => {
+    if (!draggingNote) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'none';
+    setStatus('addstatus', 'Use Ctrl+C and Ctrl+V to copy selected notes into the form.', false);
+  });
+  input.addEventListener('drop', event => {
+    if (draggingNote) event.preventDefault();
+  });
+}
+doc.addEventListener('copy', event => {
+  if (!event.clipboardData) return;
+  const text = selectedNoteText(getSelection());
+  if (text === null) return;
+  event.clipboardData.setData('text/plain', text);
+  event.preventDefault();
+});
+
 /* ---------- messages from the host ---------- */
 window.fromHost = msg => {
   if (msg.kind === "entries") {
@@ -456,6 +556,11 @@ window.fromHost = msg => {
     requestClose(msg.reason === "shortcut" ? "shortcut" : "window");
   } else if (msg.kind === "status") {
     setStatus(msg.pane === "add" ? "addstatus" : "liststatus", msg.status, !!msg.ok);
+  } else if (msg.kind === "layout" || msg.kind === "layoutError") {
+    applyLayout(msg.layout);
+    if (msg.kind === "layoutError") {
+      setStatus(listOpen() ? "liststatus" : "addstatus", msg.status, false, true);
+    }
   }
 };
 
@@ -476,5 +581,6 @@ addEventListener("keydown", e => {
 
 updateSaveProblem(saveProblem);
 renderDoc();
+applyLayout(S.layout);
 showPane(S.entries.length && !S.candidates.length ? "list" : "add");
 </script>

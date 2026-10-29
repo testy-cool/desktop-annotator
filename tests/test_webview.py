@@ -1,13 +1,16 @@
 import json
+import os
 import sys
 import unittest
 import tempfile
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 from datetime import datetime
 
 from desktop_annotator.annotation import Annotation, load_document, render_annotation
 from desktop_annotator.capture import TextCandidate
+from desktop_annotator.settings import load_layout, save_layout
 from desktop_annotator.webview import (
     AnnotatorWindow,
     annotations_from_payload,
@@ -91,6 +94,11 @@ class BuildStateTests(unittest.TestCase):
         )
         self.assertEqual(state["stamp"], "2026-08-22 15:20")
         self.assertEqual(state["source"], "Firefox")
+        self.assertEqual(state["layout"], "tabs")
+
+    def test_carries_the_saved_split_layout(self):
+        state = build_state(candidates=[], source="Firefox", annotations=[], layout="split")
+        self.assertEqual(state["layout"], "split")
 
 
 class PageWithStateTests(unittest.TestCase):
@@ -114,6 +122,13 @@ class PageWithStateTests(unittest.TestCase):
 
 
 class GuardedHostSaveTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        environment = patch.dict(os.environ, {"XDG_CONFIG_HOME": temporary.name})
+        environment.start()
+        self.addCleanup(environment.stop)
+
     def host(self, directory):
         host = AnnotatorWindow.__new__(AnnotatorWindow)
         host.directory = directory
@@ -244,6 +259,9 @@ class GuardedHostCloseTests(unittest.TestCase):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         self.directory = Path(temporary.name)
+        environment = patch.dict(os.environ, {"XDG_CONFIG_HOME": str(self.directory / "config")})
+        environment.start()
+        self.addCleanup(environment.stop)
         self.gtk, self.webkit = Mock(), Mock()
         self.host = AnnotatorWindow(
             candidates=[], source="Firefox", directory=self.directory,
@@ -327,6 +345,137 @@ class GuardedHostCloseTests(unittest.TestCase):
         self.host.window.connect.assert_any_call("delete-event", self.host._on_delete_event)
         self.host.window.connect.assert_any_call("destroy", self.gtk.main_quit)
         self.host.view.connect.assert_called_once_with("load-changed", self.host._on_load_changed)
+
+
+class LayoutHostTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.directory = Path(temporary.name)
+        environment = patch.dict(os.environ, {"XDG_CONFIG_HOME": str(self.directory / "config")})
+        environment.start()
+        self.addCleanup(environment.stop)
+
+    def monitor(self, x=0, y=0, width=1920, height=1080):
+        return Mock(get_workarea=Mock(return_value=SimpleNamespace(x=x, y=y, width=width, height=height)))
+
+    def host(self, *, layout="tabs", monitor=None):
+        save_layout(layout)
+        gdk = Mock()
+        display = gdk.Display.get_default.return_value
+        display.get_monitor_at_window.return_value = monitor or self.monitor()
+        host = AnnotatorWindow(
+            candidates=[TextCandidate("Clipboard", "Draft quote")], source="Test", directory=self.directory,
+            gtk=Mock(), gdk=gdk, webkit=Mock(), glib=Mock(),
+        )
+        host.window.get_size.return_value = (760, 700)
+        host.window.get_position.return_value = (100, 100)
+        host.messages = []
+        host._to_page = host.messages.append
+        return host
+
+    def test_constructor_restores_split_size_and_initial_page_state(self):
+        host = self.host(layout="split")
+        host.window.set_default_size.assert_called_once_with(1200, 640)
+        host.window.set_size_request.assert_called_once_with(1000, 560)
+        self.assertIn('"layout": "split"', host.view.load_html.call_args.args[0])
+
+    def test_constructor_defaults_to_tabs(self):
+        host = self.host()
+        host.window.set_default_size.assert_called_once_with(760, 640)
+        host.window.set_size_request.assert_called_once_with(640, 560)
+
+    def test_switch_saves_before_resizing_and_keeps_the_existing_page(self):
+        host = self.host()
+        initial_loads = host.view.load_html.call_count
+        baseline = host.document
+        persisted_before_resize = []
+        host.window.resize.side_effect = lambda *_: persisted_before_resize.append(load_layout())
+
+        host._do_layout({"layout": "split"})
+
+        self.assertEqual(persisted_before_resize, ["split"])
+        self.assertEqual(host.layout, "split")
+        host.window.resize.assert_called_once_with(1200, 700)
+        host.window.set_size_request.assert_called_with(1000, 560)
+        self.assertEqual(host.messages, [{"kind": "layout", "layout": "split"}])
+        self.assertEqual(host.view.load_html.call_count, initial_loads)
+        self.assertIs(host.document, baseline)
+
+    def test_tabs_switch_restores_narrow_width_and_keeps_height(self):
+        host = self.host(layout="split")
+        host.window.get_size.return_value = (1400, 800)
+        host._do_layout({"layout": "tabs"})
+        host.window.resize.assert_called_once_with(760, 800)
+        host.window.set_size_request.assert_called_with(640, 560)
+        self.assertEqual(load_layout(), "tabs")
+
+    def test_save_failure_retains_native_layout_and_page_without_reload(self):
+        host = self.host()
+        baseline = host.document
+        initial_loads = host.view.load_html.call_count
+        host.window.reset_mock()
+        with patch("desktop_annotator.webview.save_layout", side_effect=OSError("Disk full")):
+            host._do_layout({"layout": "split"})
+        self.assertEqual(host.layout, "tabs")
+        self.assertEqual(load_layout(), "tabs")
+        self.assertEqual(host.window.mock_calls, [])
+        self.assertEqual(host.messages[0]["kind"], "layoutError")
+        self.assertEqual(host.messages[0]["layout"], "tabs")
+        self.assertIn("Disk full", host.messages[0]["status"])
+        self.assertEqual(host.view.load_html.call_count, initial_loads)
+        self.assertIs(host.document, baseline)
+
+    def test_invalid_layout_is_rejected_before_any_native_change(self):
+        host = self.host()
+        host.window.reset_mock()
+        host._do_layout({"layout": "wide"})
+        self.assertEqual(host.window.mock_calls, [])
+        self.assertEqual(load_layout(), "tabs")
+        self.assertEqual(host.messages[0]["kind"], "layoutError")
+
+    def test_layout_bridge_dispatches_the_page_message(self):
+        host = self.host()
+        result = Mock()
+        result.get_js_value.return_value.to_string.return_value = json.dumps({"action": "layout", "layout": "split"})
+        host._on_message(None, result)
+        self.assertEqual(host.layout, "split")
+        self.assertEqual(load_layout(), "split")
+
+    def test_switch_clamps_size_minimum_and_position_to_small_workarea(self):
+        host = self.host(monitor=self.monitor(x=1920, y=30, width=900, height=600))
+        host.window.get_position.return_value = (2500, 200)
+        host._do_layout({"layout": "split"})
+        host.window.resize.assert_called_once_with(900, 600)
+        host.window.set_size_request.assert_called_with(900, 560)
+        host.window.move.assert_called_once_with(1920, 30)
+
+    def test_switch_raises_a_short_window_to_the_minimum_height(self):
+        host = self.host()
+        host.window.get_size.return_value = (760, 500)
+        host._do_layout({"layout": "split"})
+        host.window.resize.assert_called_once_with(1200, 560)
+
+    def test_placement_centers_the_saved_split_width_on_the_right_monitor(self):
+        host = self.host(layout="split")
+        display = host.Gdk.Display.get_default.return_value
+        display.get_n_monitors.return_value = 2
+        display.get_monitor.side_effect = [self.monitor(), self.monitor(x=1920, width=1600, y=30, height=900)]
+        host._pointer = lambda: (100, 100)
+        host.place_on_right_monitor()
+        host.window.resize.assert_called_once_with(1200, 640)
+        host.window.move.assert_called_once_with(2120, 160)
+
+    def test_placement_fits_split_inside_a_narrow_right_monitor_workarea(self):
+        host = self.host(layout="split")
+        display = host.Gdk.Display.get_default.return_value
+        display.get_n_monitors.return_value = 2
+        display.get_monitor.side_effect = [self.monitor(), self.monitor(x=1920, width=900, y=30, height=600)]
+        host._pointer = lambda: (100, 100)
+        host.place_on_right_monitor()
+        host.window.set_size_request.assert_called_with(900, 560)
+        host.window.resize.assert_called_once_with(900, 600)
+        host.window.move.assert_called_once_with(1920, 30)
 
 
 class WebPopupToggleTests(unittest.TestCase):

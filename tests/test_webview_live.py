@@ -302,7 +302,7 @@ class LiveWebKitTests(unittest.TestCase):
         try:
             self.assertTrue(select.select([server.stdout], [], [], 5)[0], 'Xvfb startup timed out')
             with tempfile.TemporaryDirectory() as runtime:
-                env = dict(os.environ, DISPLAY=':'+server.stdout.readline().strip(), GDK_BACKEND='x11', XDG_RUNTIME_DIR=runtime)
+                env = dict(os.environ, DISPLAY=':'+server.stdout.readline().strip(), GDK_BACKEND='x11', XDG_RUNTIME_DIR=runtime, XDG_CONFIG_HOME=str(Path(runtime)/'config'))
                 wm = subprocess.Popen(['metacity', '--sm-disable'], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 result = subprocess.run(['/usr/bin/python3', '-c', SCRIPT], cwd=ROOT, env=env, text=True, capture_output=True, timeout=65)
                 self.assertEqual(result.returncode, 0, result.stdout+'\n'+result.stderr)
