@@ -33,13 +33,27 @@ to keep them somewhere else.
 
 ## The list
 
-The second tab is every note you have taken, newest first. It is one document
+The List pane is every note you have taken, newest first. Choose `Side by side`
+from the labeled `Layout` menu to keep the quote and note input on the left and
+the list on the right, or choose `Tabs` to show one pane at a time. The app
+remembers that choice for the next launch. Switching layouts keeps your drafts,
+filter, selection, Undo history, and any close warning in place. The Add and List
+buttons focus the corresponding pane in either layout.
+
+![Input and saved notes side by side](docs/split.png)
+
+The list is one document
 rather than a table of rows, so you can drag a selection across the end of one
 note and the start of the next and copy exactly that. Filter with `Ctrl+F`,
 copy the selection with `Ctrl+C`, edit any note in place and press `Save edits`
 to write the file back.
 
-Changed notes show an `edited` marker, and the footer counts edited and deleted
+There are no visible `---` separators between notes. Copying a selection that
+crosses notes inserts `---` between the selected note fragments on the clipboard;
+`Copy all` also separates notes with `---`. These clipboard separators do not
+appear in the editable list, and a selection within one note stays unchanged.
+
+Changed notes show an `edited` marker, and the toolbar counts edited and deleted
 notes. `Save edits` turns blue while changes are unsaved; saving or reverting
 clears those indicators. Editing a note back to its saved text clears its marker.
 
@@ -91,7 +105,8 @@ typing. The close button, Cancel, and the native window close always need an
 explicit `Discard and close` when work is unsaved.
 
 A captured quote alone is not an unsaved draft. Changing that quote or typing a
-note makes the Add tab unsaved. `Ctrl+Enter` saves only the current tab. If the
+note makes the Add pane unsaved. `Ctrl+Enter` saves only the active pane: in
+Side by side, that is the pane you last focused. If the
 List tab has unsaved edits, adding a note takes you there first to save or revert
 those edits; your Add draft is kept.
 
@@ -100,8 +115,8 @@ those edits; your Add draft is kept.
 | Key | Does |
 | --- | --- |
 | `Ctrl+Enter` | Save the note, or save your edits in the list |
-| `Ctrl+1` | Add tab |
-| `Ctrl+2` or `Ctrl+L` | List tab |
+| `Ctrl+1` | Focus the note input in Add |
+| `Ctrl+2` or `Ctrl+L` | Focus the List pane |
 | `Ctrl+F` | Filter the list |
 | `Ctrl+A` | Select every note in the list |
 | `Esc` | Close; warn first if either tab has unsaved work |
