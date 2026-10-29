@@ -4,7 +4,9 @@ from unittest.mock import patch
 
 import tests.test_webview_live as webkit_fixture
 
-PREFIX = webkit_fixture.SCRIPT.split('    assert js("showPane')[0]
+BOOTSTRAP_END = '    assert js("showPane'
+assert BOOTSTRAP_END in webkit_fixture.SCRIPT, 'Live WebKit bootstrap marker changed'
+PREFIX = webkit_fixture.SCRIPT.split(BOOTSTRAP_END, 1)[0]
 
 
 def run_webkit(body):
@@ -55,6 +57,36 @@ class ClipboardSelectionTests(unittest.TestCase):
     subprocess.run(['xdotool','key','--clearmodifiers','ctrl+v'],check=True)
     until(lambda: js("return $('comment').value") == expected)
     assert not js("return doc.textContent.includes('---')")
+''')
+
+
+class DragSelectionTests(unittest.TestCase):
+    def test_drag_cannot_move_text_out_of_the_saved_list(self):
+        run_webkit(r'''
+    js("$('layout').value='split';$('layout').dispatchEvent(new Event('change'));showPane('list');return true")
+    until(lambda: js('return innerWidth')==1200)
+    before=js("return doc.innerText")
+    point=js("const a=doc.querySelector('.entry:first-child .q').firstChild,b=doc.querySelector('.entry:last-child .q').firstChild;doc.focus();const selected=document.createRange();selected.setStart(a,2);selected.setEnd(b,5);const s=getSelection();s.removeAllRanges();s.addRange(selected);const char=document.createRange();char.setStart(a,3);char.setEnd(a,4);const r=char.getBoundingClientRect(),t=$('comment').getBoundingClientRect();window.dragStarted=false;window.dropSeen=false;window.dragLog=[];for(const type of ['dragenter','dragover','drop','dragend'])document.addEventListener(type,e=>window.dragLog.push([type,e.target.id||e.target.className,e.clientX,e.clientY,e.dataTransfer.effectAllowed,e.dataTransfer.dropEffect]));doc.addEventListener('dragstart',()=>window.dragStarted=true);$('comment').addEventListener('drop',()=>window.dropSeen=true);return {sx:r.left+r.width/2,sy:r.top+r.height/2,tx:t.left+30,ty:t.top+30}")
+    ox,oy=w.window.get_position()
+    origin=w.window.get_window().get_origin()
+    point['windowPosition']=[ox,oy];point['clientOrigin']=list(origin)
+    def mouse(*args):subprocess.run(['xdotool',*map(str,args)],check=True)
+    def settle():
+        deadline=time.monotonic()+.18
+        until(lambda:time.monotonic()>deadline)
+    mouse('mousemove','--sync',round(ox+point['sx']),round(oy+point['sy']));settle()
+    mouse('mousedown',1);settle()
+    mouse('mousemove','--sync',round(ox+point['sx']+15),round(oy+point['sy']));settle()
+    mouse('mousemove','--sync',round(ox+point['tx']),round(oy+point['ty']));settle()
+    mouse('mousemove','--sync',round(ox+point['tx']+8),round(oy+point['ty']+8));settle()
+    mouse('mousemove','--sync',round(ox+point['tx']+12),round(oy+point['ty']+8));settle()
+    mouse('mouseup',1);settle()
+    assert js('return window.dragStarted'), 'Test did not initiate a native selection drag'
+    assert js("return window.dragLog.some(e=>e[0]==='dragover'&&e[1]==='comment')"), point
+    assert js('return doc.innerText') == before, (before,js("return {text:doc.innerText,events:window.dragLog,note:$('comment').value}"))
+    assert js("return $('comment').value") == ''
+    assert js("return $('addstatus').textContent.includes('Ctrl+C')")
+    assert not js('return listDirty()')
 ''')
 
 

@@ -52,6 +52,8 @@ There are no visible `---` separators between notes. Copying a selection that
 crosses notes inserts `---` between the selected note fragments on the clipboard;
 `Copy all` also separates notes with `---`. These clipboard separators do not
 appear in the editable list, and a selection within one note stays unchanged.
+Use `Ctrl+C` and `Ctrl+V` to copy notes into the input form. Moving text from the
+list into the form by dragging is blocked so it cannot remove the original.
 
 Changed notes show an `edited` marker, and the toolbar counts edited and deleted
 notes. `Save edits` turns blue while changes are unsaved; saving or reverting

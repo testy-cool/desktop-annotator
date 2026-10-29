@@ -513,6 +513,25 @@ function selectedNoteText(selection) {
   }
   return result.length ? result.join('\n---\n') : null;
 }
+// Moving text out of saved notes is surprising when both editors are visible.
+let draggingNote = false;
+doc.addEventListener('dragstart', event => {
+  if (!event.dataTransfer) return;
+  event.dataTransfer.effectAllowed = 'copy';
+  draggingNote = true;
+});
+doc.addEventListener('dragend', () => { draggingNote = false; });
+for (const input of [$('quote'), $('comment')]) {
+  input.addEventListener('dragover', event => {
+    if (!draggingNote) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'none';
+    setStatus('addstatus', 'Use Ctrl+C and Ctrl+V to copy selected notes into the form.', false);
+  });
+  input.addEventListener('drop', event => {
+    if (draggingNote) event.preventDefault();
+  });
+}
 doc.addEventListener('copy', event => {
   if (!event.clipboardData) return;
   const text = selectedNoteText(getSelection());
